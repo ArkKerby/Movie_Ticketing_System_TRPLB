@@ -67,6 +67,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         // WITH THIS:
                         if ($row['role'] === 'admin') {
                             header("Location: admin-panel.php");
+                        } elseif ($row['role'] === 'staff') {
+                            header("Location: staff/dashboard.php");
                         } elseif (!empty($_SESSION['return_after_login'])) {
                             $redirect = $_SESSION['return_after_login'];
                             unset($_SESSION['return_after_login']);

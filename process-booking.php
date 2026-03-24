@@ -264,19 +264,20 @@ try {
     $bookingStatusCheck = $conn->query("SHOW COLUMNS FROM RESERVE LIKE 'booking_status'");
     $hasBookingStatus = $bookingStatusCheck && $bookingStatusCheck->num_rows > 0;
     
+    $bookingTypeOnline = 'online';
     if ($hasBookingStatus) {
         // Auto-approve: set booking_status to 'approved' immediately
-        $stmt = $conn->prepare("INSERT INTO RESERVE (acc_id, schedule_id, reserve_date, ticket_amount, sum_price, food_total, booking_status) VALUES (?, ?, NOW(), ?, ?, ?, 'approved')");
+        $stmt = $conn->prepare("INSERT INTO RESERVE (acc_id, schedule_id, reserve_date, ticket_amount, sum_price, food_total, booking_status, booking_type) VALUES (?, ?, NOW(), ?, ?, ?, 'approved', ?)");
         if (!$stmt) {
             throw new Exception("Failed to prepare reservation statement: " . $conn->error);
         }
-        $stmt->bind_param("iiidd", $userId, $scheduleId, $seatCount, $seatTotal, $foodTotal);
+        $stmt->bind_param("iiidds", $userId, $scheduleId, $seatCount, $seatTotal, $foodTotal, $bookingTypeOnline);
     } else {
-        $stmt = $conn->prepare("INSERT INTO RESERVE (acc_id, schedule_id, reserve_date, ticket_amount, sum_price, food_total) VALUES (?, ?, NOW(), ?, ?, ?)");
+        $stmt = $conn->prepare("INSERT INTO RESERVE (acc_id, schedule_id, reserve_date, ticket_amount, sum_price, food_total, booking_type) VALUES (?, ?, NOW(), ?, ?, ?, ?)");
         if (!$stmt) {
             throw new Exception("Failed to prepare reservation statement: " . $conn->error);
         }
-        $stmt->bind_param("iiidd", $userId, $scheduleId, $seatCount, $seatTotal, $foodTotal);
+        $stmt->bind_param("iiidds", $userId, $scheduleId, $seatCount, $seatTotal, $foodTotal, $bookingTypeOnline);
     }
     if (!$stmt->execute()) {
         throw new Exception("Failed to execute reservation: " . $stmt->error);

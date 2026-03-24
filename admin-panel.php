@@ -62,6 +62,14 @@ if (empty($nowShowing)) {
 
 $activeMovies = count($nowShowing);
 
+// Pending PWD applications count
+$pwdPendingCount = 0;
+$pwdTableCheck = $conn->query("SHOW TABLES LIKE 'PWD_APPLICATIONS'");
+if ($pwdTableCheck && $pwdTableCheck->num_rows > 0) {
+    $pwdCountRes = $conn->query("SELECT COUNT(*) AS cnt FROM PWD_APPLICATIONS WHERE status = 'pending'");
+    if ($pwdCountRes) $pwdPendingCount = intval($pwdCountRes->fetch_assoc()['cnt']);
+}
+
 // Coming Soon - ONLY active movies (not deleted)
 $comingSoonResult = $conn->query("
     SELECT DISTINCT m.*
@@ -122,6 +130,7 @@ if (empty($comingSoon)) {
             <a href="view-shows.php">List Shows</a>
             <a href="view-bookings.php">List Bookings</a>
             <a href="view-deleted-movies.php">Deleted Movies</a>
+            <a href="admin-pwd-applications.php" style="display:flex;align-items:center;justify-content:space-between;">PWD Applications<?php if($pwdPendingCount>0): ?><span style="background:#e74c3c;color:#fff;font-size:0.72rem;font-weight:700;padding:1px 7px;border-radius:12px;"><?= $pwdPendingCount ?></span><?php endif; ?></a>
         </nav>
         <div class="sidebar-footer">
             <a href="logout.php" class="logout-btn" id="logoutBtn" style="display: none;">➜ Logout</a>

@@ -28,7 +28,7 @@ $has_payment_status = $paymentStatusCheck && $paymentStatusCheck->num_rows > 0;
 // Get ticket details
 $ticketQuery = "
     SELECT t.*, r.*, m.title, m.image_poster, ms.show_date, ms.show_hour, 
-           p.payment_type, p.amount_paid, p.reference_number
+           p.payment_type, p.amount_paid, p.reference_number, r.booking_type
 ";
 
 // Add payment_status if column exists
@@ -192,6 +192,10 @@ $bookingStatusClass = 'status-' . str_replace([' ', '_'], '-', $bookingApprovalS
         
         <div class="ticket-header">
             <h1>Ticketix</h1>
+            <?php
+                $clientTypeLabel = (isset($ticket['booking_type']) && $ticket['booking_type'] === 'walk-in') ? 'Walk-in' : 'Client';
+            ?>
+            <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:4px;font-weight:600;letter-spacing:1px;text-transform:uppercase;"><?= $clientTypeLabel ?></div>
             <div class="ticket-number">Ticket #<?= htmlspecialchars($ticket['ticket_number']) ?></div>
         </div>
         

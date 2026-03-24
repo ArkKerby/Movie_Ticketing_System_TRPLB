@@ -70,3 +70,39 @@ h3 {
     position: relative;
     z-index: 1;
 }
+
+/* Responsive */
+@media (max-width: 768px) {
+    .container {
+        margin: 20px 15px;
+        padding: 15px 20px;
+    }
+
+    h2, h3 {
+        font-size: 1.2em;
+    }
+
+    li {
+        padding: 8px 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .container {
+        margin: 10px 8px;
+        padding: 12px 15px;
+        border-radius: 8px;
+    }
+
+    h2, h3 {
+        font-size: 1em;
+    }
+
+    a {
+        font-size: 14px;
+    }
+
+    .address {
+        font-size: 13px;
+    }
+}

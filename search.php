@@ -527,28 +527,58 @@ if (!empty($search_query)) {
           border-color: #7E8D93;
         }
         
-        /* Responsive design for navigation search bar */
+        /* Responsive search page content */
         @media (max-width: 768px) {
-          .nav-search-form {
+          .search-container {
+            padding: 20px 10px;
+            margin-top: 10px;
+          }
+
+          .search-header h1 {
+            font-size: 1.8em;
+          }
+
+          .search-form {
             flex-direction: column;
             gap: 10px;
-            margin-left: 0;
-            width: 100%;
           }
-          
-          .nav-search-label {
-            display: none;
-          }
-          
-          .nav-search-input {
+
+          .search-input {
             width: 100%;
             border-radius: 25px;
           }
-          
-          .nav-search-btn {
-            width: 100%;
+
+          .search-btn {
             border-radius: 25px;
-            min-width: auto;
+            width: 100%;
+          }
+
+          .search-results {
+            grid-template-columns: 1fr;
+            gap: 20px;
+          }
+
+          .search-result-content {
+            padding: 15px;
+          }
+
+          .search-result-title {
+            font-size: 1.2em;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .search-header h1 {
+            font-size: 1.5em;
+          }
+
+          .search-result-image {
+            height: 180px;
+          }
+
+          .search-result-meta {
+            gap: 8px;
+            font-size: 0.85em;
           }
         }
     </style>
@@ -559,14 +589,22 @@ if (!empty($search_query)) {
             <div class="logo">
                 <img src="images/brand x.png" alt="Ticketix Logo">
             </div>
-            <nav>
+
+            <!-- Hamburger Menu Button -->
+            <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleMobileNav()" aria-label="Toggle navigation menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+
+            <nav id="mainNav">
                 <a href="TICKETIX NI CLAIRE.php#home">Home</a>
                 <a href="TICKETIX NI CLAIRE.php#now-showing">Now Showing</a>
                 <a href="TICKETIX NI CLAIRE.php#coming-soon">Coming Soon</a>
                 <a href="TICKETIX NI CLAIRE.php#contact">Contact Us</a>
             </nav>
             
-            <form class="nav-search-form" method="GET" action="search.php">
+            <form class="nav-search-form" id="navSearchForm" method="GET" action="search.php">
                 <label for="nav-search" class="nav-search-label">Search Movies:</label>
                 <input type="text" id="nav-search" name="q" placeholder="Search..." class="nav-search-input" value="<?php echo htmlspecialchars($search_query); ?>" required>
                 <button type="submit" class="nav-search-btn">🔍</button>
@@ -616,6 +654,8 @@ if (!empty($search_query)) {
             <?php endif; ?>
         </div>
     </header>
+    <!-- Mobile nav overlay -->
+    <div class="nav-overlay" id="navOverlay" onclick="toggleMobileNav()"></div>
 
     <div class="search-container">
         <?php if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']): ?>
@@ -751,6 +791,55 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   });
+});
+
+// ── Mobile Navigation Toggle ──────────────────────────────────
+function toggleMobileNav() {
+    const hamburger = document.getElementById('hamburgerBtn');
+    const nav = document.getElementById('mainNav');
+    const searchForm = document.getElementById('navSearchForm');
+    const rightSection = document.querySelector('.right-section');
+    const overlay = document.getElementById('navOverlay');
+    
+    const isOpen = nav.classList.contains('mobile-open');
+    
+    if (isOpen) {
+        hamburger.classList.remove('active');
+        nav.classList.remove('mobile-open');
+        if (searchForm) searchForm.classList.remove('mobile-open');
+        if (rightSection) rightSection.classList.remove('mobile-open');
+        overlay.classList.remove('active');
+        document.body.style.overflow = '';
+    } else {
+        hamburger.classList.add('active');
+        nav.classList.add('mobile-open');
+        if (searchForm) searchForm.classList.add('mobile-open');
+        if (rightSection) rightSection.classList.add('mobile-open');
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+document.querySelectorAll('#mainNav a').forEach(link => {
+    link.addEventListener('click', function() {
+        if (window.innerWidth <= 768) toggleMobileNav();
+    });
+});
+
+window.addEventListener('resize', function() {
+    if (window.innerWidth > 768) {
+        const nav = document.getElementById('mainNav');
+        const searchForm = document.getElementById('navSearchForm');
+        const rightSection = document.querySelector('.right-section');
+        const hamburger = document.getElementById('hamburgerBtn');
+        const overlay = document.getElementById('navOverlay');
+        if (nav) nav.classList.remove('mobile-open');
+        if (searchForm) searchForm.classList.remove('mobile-open');
+        if (rightSection) rightSection.classList.remove('mobile-open');
+        if (hamburger) hamburger.classList.remove('active');
+        if (overlay) overlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
 });
 </script>
 </body>

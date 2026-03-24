@@ -579,7 +579,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                 <!-- ── TRAILER FIELD ─────────────────────────────── -->
                 <div class="form-group">
-                    <label for="trailer_youtube_id">🎬 YouTube Trailer</label>
+                    <label for="trailer_youtube_id">YouTube Trailer</label>
                     <input type="text" id="trailer_youtube_id" name="trailer_youtube_id"
                            placeholder="Paste YouTube URL or video ID  e.g. https://youtu.be/YShVEXb7-ic"
                            oninput="previewTrailer(this.value)">

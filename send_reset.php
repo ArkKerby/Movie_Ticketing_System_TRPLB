@@ -22,8 +22,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $update->bind_param("sss", $token, $expiry, $email);
         $update->execute();
 
-        // Create the reset link
-        $resetLink = "http://localhost/ticketix/reset_password.php?token=" . $token;
+        // Create the reset link (dynamically detect host so it works from any device)
+        $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+        $baseUrl = $protocol . "://" . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['REQUEST_URI']), '/\\');
+        $resetLink = $baseUrl . "/reset_password.php?token=" . $token;
 
         echo "<div style='text-align:center; margin-top:50px; font-family:Arial'>";
         echo "<h2>Password Reset Link</h2>";

@@ -171,7 +171,22 @@ $conn->close();
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ticketix</title>
-  <link rel="icon" type="image/png" href="images/brand x.png" />
+
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#0b0b0b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Ticketix" />
+
+  <!-- Favicons & Icons -->
+  <link rel="icon" type="image/png" sizes="96x96" href="icons/favicon-96x96.png" />
+  <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
+  <link rel="shortcut icon" href="icons/favicon.ico" />
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
+
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json" />
+
   <link rel="stylesheet" href="css/style.css?v=<?php echo time(); ?>">
   <link rel="stylesheet" href="css/ticketix-main.css?v=<?php echo time(); ?>">
 </head>
@@ -183,7 +198,14 @@ $conn->close();
       <img src="images/brand x.png" alt="images/Ticketix Logo">
     </div>
 
-    <nav>
+    <!-- Hamburger Menu Button (visible on mobile only) -->
+    <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleMobileNav()" aria-label="Toggle navigation menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+
+    <nav id="mainNav">
       <a href="#home" class="active">Home</a>
       <a href="#now-showing">Now Showing</a>
       <a href="#coming-soon">Coming Soon</a>
@@ -191,12 +213,11 @@ $conn->close();
     </nav>
 
       
-      <form class="nav-search-form" method="GET" action="search.php">
+      <form class="nav-search-form" id="navSearchForm" method="GET" action="search.php">
       <label for="nav-search" class="nav-search-label">Search Movies:</label>
         <input type="text" id="nav-search" name="q" placeholder="Search..." class="nav-search-input" required>
         <button type="submit" class="nav-search-btn">🔍</button>
     </form>
-    </nav>
   </div>
 
   <div class="right-section">
@@ -246,6 +267,8 @@ $conn->close();
     <?php endif; ?>
   </div>
   </header>
+  <!-- Mobile nav overlay -->
+  <div class="nav-overlay" id="navOverlay" onclick="toggleMobileNav()"></div>
 
   <section id="home" class="hero">
   <?php 
@@ -1220,8 +1243,76 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
+// ── Mobile Navigation Toggle ──────────────────────────────────
+function toggleMobileNav() {
+    const hamburger = document.getElementById('hamburgerBtn');
+    const nav = document.getElementById('mainNav');
+    const searchForm = document.getElementById('navSearchForm');
+    const rightSection = document.querySelector('.right-section');
+    const overlay = document.getElementById('navOverlay');
+    
+    const isOpen = nav.classList.contains('mobile-open');
+    
+    if (isOpen) {
+        // Close
+        hamburger.classList.remove('active');
+        nav.classList.remove('mobile-open');
+        searchForm.classList.remove('mobile-open');
+        rightSection.classList.remove('mobile-open');
+        overlay.classList.remove('active');
+        document.body.style.overflow = '';
+    } else {
+        // Open
+        hamburger.classList.add('active');
+        nav.classList.add('mobile-open');
+        searchForm.classList.add('mobile-open');
+        rightSection.classList.add('mobile-open');
+        overlay.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+// Close mobile nav when clicking a nav link (smooth scroll still works)
+document.querySelectorAll('#mainNav a').forEach(link => {
+    link.addEventListener('click', function() {
+        if (window.innerWidth <= 768) {
+            toggleMobileNav();
+        }
+    });
+});
+
+// Close mobile nav on window resize past breakpoint
+window.addEventListener('resize', function() {
+    if (window.innerWidth > 768) {
+        const nav = document.getElementById('mainNav');
+        const searchForm = document.getElementById('navSearchForm');
+        const rightSection = document.querySelector('.right-section');
+        const hamburger = document.getElementById('hamburgerBtn');
+        const overlay = document.getElementById('navOverlay');
+        
+        if (nav) nav.classList.remove('mobile-open');
+        if (searchForm) searchForm.classList.remove('mobile-open');
+        if (rightSection) rightSection.classList.remove('mobile-open');
+        if (hamburger) hamburger.classList.remove('active');
+        if (overlay) overlay.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+});
+
 </script>
 
+
+
+<!-- Service Worker Registration -->
+<script>
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+            .then(reg => console.log('Ticketix SW registered:', reg.scope))
+            .catch(err => console.log('SW registration failed:', err));
+    });
+}
+</script>
 
 </body>
 </html>
