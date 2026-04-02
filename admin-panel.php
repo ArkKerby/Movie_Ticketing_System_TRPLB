@@ -1,6 +1,6 @@
 <?php
 session_start();
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'mall_admin') {
     header("Location: login.php");
     exit();
 }
@@ -17,7 +17,7 @@ $totalBookingsQuery = $conn->query("SELECT COUNT(*) AS total FROM RESERVE");
 $totalBookings = $totalBookingsQuery ? intval($totalBookingsQuery->fetch_assoc()['total'] ?? 0) : 0;
 
 // Calculate total revenue from all paid payments
-$totalRevenueQuery = $conn->query("SELECT IFNULL(SUM(amount_paid), 0) AS total FROM PAYMENT WHERE payment_status = 'paid'");
+$totalRevenueQuery = $conn->query("SELECT IFNULL(SUM(amount_paid), 0) AS total FROM TICKET WHERE payment_status = 'paid'");
 $revenueResult = $totalRevenueQuery ? $totalRevenueQuery->fetch_assoc() : null;
 $totalRevenue = $revenueResult ? floatval($revenueResult['total'] ?? 0) : 0.00;
 
@@ -64,10 +64,15 @@ $activeMovies = count($nowShowing);
 
 // Pending PWD applications count
 $pwdPendingCount = 0;
-$pwdTableCheck = $conn->query("SHOW TABLES LIKE 'PWD_APPLICATIONS'");
-if ($pwdTableCheck && $pwdTableCheck->num_rows > 0) {
-    $pwdCountRes = $conn->query("SELECT COUNT(*) AS cnt FROM PWD_APPLICATIONS WHERE status = 'pending'");
-    if ($pwdCountRes) $pwdPendingCount = intval($pwdCountRes->fetch_assoc()['cnt']);
+$pwdCountRes = $conn->query("SELECT COUNT(*) AS cnt FROM DISCOUNT_APPLICATIONS WHERE discount_type = 'pwd' AND status = 'pending'");
+if ($pwdCountRes) {
+    $pwdPendingCount = $pwdCountRes->fetch_assoc()['cnt'];
+}
+
+$seniorPendingCount = 0;
+$seniorCountRes = $conn->query("SELECT COUNT(*) AS cnt FROM DISCOUNT_APPLICATIONS WHERE discount_type = 'senior' AND status = 'pending'");
+if ($seniorCountRes) {
+    $seniorPendingCount = $seniorCountRes->fetch_assoc()['cnt'];
 }
 
 // Coming Soon - ONLY active movies (not deleted)
@@ -122,7 +127,7 @@ if (empty($comingSoon)) {
     <aside class="sidebar">
         <div class="profile-section">
             <img src="images/brand x.png" alt="Profile Picture" class="profile-pic clickable-logo" onclick="toggleLogout()" style="cursor: pointer;" />
-            <h2>Admin</h2>
+            <h2>Mall Admin</h2>
         </div>
         <nav class="sidebar-nav">
             <a href="admin-panel.php" class="active">Dashboard</a>
@@ -130,7 +135,9 @@ if (empty($comingSoon)) {
             <a href="view-shows.php">List Shows</a>
             <a href="view-bookings.php">List Bookings</a>
             <a href="view-deleted-movies.php">Deleted Movies</a>
+            <a href="mall-admin/assign-movie.php">Assign Movies</a>
             <a href="admin-pwd-applications.php" style="display:flex;align-items:center;justify-content:space-between;">PWD Applications<?php if($pwdPendingCount>0): ?><span style="background:#e74c3c;color:#fff;font-size:0.72rem;font-weight:700;padding:1px 7px;border-radius:12px;"><?= $pwdPendingCount ?></span><?php endif; ?></a>
+            <a href="admin-senior-applications.php" style="display:flex;align-items:center;justify-content:space-between;">Senior Applications<?php if($seniorPendingCount>0): ?><span style="background:#e74c3c;color:#fff;font-size:0.72rem;font-weight:700;padding:1px 7px;border-radius:12px;"><?= $seniorPendingCount ?></span><?php endif; ?></a>
         </nav>
         <div class="sidebar-footer">
             <a href="logout.php" class="logout-btn" id="logoutBtn" style="display: none;">➜ Logout</a>
@@ -139,7 +146,7 @@ if (empty($comingSoon)) {
 
     <main class="main-content">
         <header>
-            <h1>Admin <span class="highlight">Dashboard</span></h1>
+            <h1>Mall Admin <span class="highlight">Dashboard</span></h1>
         </header>
 
         <section class="stats-cards">

@@ -1,6 +1,6 @@
 <?php
 session_start();
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'mall_admin') {
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
     exit();
 }

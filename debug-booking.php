@@ -43,7 +43,7 @@ if ($recentReserves && $recentReserves->num_rows > 0) {
 }
 
 echo "<h2>Recent Payments:</h2>";
-$recentPayments = $conn->query("SELECT * FROM PAYMENT ORDER BY payment_id DESC LIMIT 5");
+$recentPayments = $conn->query("SELECT * FROM TICKET ORDER BY ticket_id DESC LIMIT 5");
 if ($recentPayments && $recentPayments->num_rows > 0) {
     echo "<table border='1' cellpadding='5'>";
     echo "<tr><th>Payment ID</th><th>Reserve ID</th><th>Payment Type</th><th>Amount Paid</th><th>Status</th><th>Date</th></tr>";
@@ -68,7 +68,7 @@ $bookingCount = $totalBookings ? $totalBookings->fetch_assoc()['total'] : 0;
 echo "<p><strong>Total:</strong> $bookingCount</p>";
 
 echo "<h2>Total Revenue:</h2>";
-$totalRevenue = $conn->query("SELECT IFNULL(SUM(amount_paid), 0) AS total FROM PAYMENT WHERE payment_status = 'paid'");
+$totalRevenue = $conn->query("SELECT IFNULL(SUM(amount_paid), 0) AS total FROM TICKET WHERE payment_status = 'paid'");
 $revenue = $totalRevenue ? $totalRevenue->fetch_assoc()['total'] : 0;
 echo "<p><strong>Total:</strong> ₱" . number_format($revenue, 2) . "</p>";
 
@@ -94,4 +94,3 @@ if ($recentTickets && $recentTickets->num_rows > 0) {
 
 $conn->close();
 ?>
-

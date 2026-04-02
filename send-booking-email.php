@@ -15,7 +15,7 @@ function sendBookingConfirmationEmail($ticketId, $conn) {
     
     $query = "
         SELECT t.*, r.*, m.title, m.image_poster, ms.show_date, ms.show_hour,
-               p.payment_type, p.amount_paid,
+               t.payment_type, t.amount_paid,
                u.email, u.firstName, u.lastName,
                COALESCE(r.booking_status, 'approved') as booking_status
     ";
@@ -27,7 +27,7 @@ function sendBookingConfirmationEmail($ticketId, $conn) {
             JOIN MOVIE_SCHEDULE ms ON r.schedule_id = ms.schedule_id
             JOIN MOVIE m ON ms.movie_show_id = m.movie_show_id
             LEFT JOIN BRANCH b ON ms.branch_id = b.branch_id
-            JOIN PAYMENT p ON t.payment_id = p.payment_id
+            -- payment columns now in TICKET
             JOIN USER_ACCOUNT u ON r.acc_id = u.acc_id
             WHERE t.ticket_id = ?
         ";
@@ -37,7 +37,7 @@ function sendBookingConfirmationEmail($ticketId, $conn) {
             JOIN RESERVE r ON t.reserve_id = r.reservation_id
             JOIN MOVIE_SCHEDULE ms ON r.schedule_id = ms.schedule_id
             JOIN MOVIE m ON ms.movie_show_id = m.movie_show_id
-            JOIN PAYMENT p ON t.payment_id = p.payment_id
+            -- payment columns now in TICKET
             JOIN USER_ACCOUNT u ON r.acc_id = u.acc_id
             WHERE t.ticket_id = ?
         ";
@@ -68,11 +68,11 @@ function sendBookingConfirmationEmail($ticketId, $conn) {
     
     // Get seats
     $stmt = $conn->prepare("
-        SELECT s.seat_number
+        SELECT rs.seat_number
         FROM RESERVE_SEAT rs
-        JOIN SEAT s ON rs.seat_id = s.seat_id
+        -- seat_number now in RESERVE_SEAT
         WHERE rs.reservation_id = ?
-        ORDER BY s.seat_number ASC
+        ORDER BY rs.seat_number ASC
     ");
     $stmt->bind_param("i", $ticket['reserve_id']);
     $stmt->execute();
@@ -281,4 +281,3 @@ function sendBookingConfirmationEmail($ticketId, $conn) {
         return false;
     }
 }
-

@@ -1,4 +1,8 @@
 <?php
+// Single branch mode — skip branch selection, go straight to cinema types
+header("Location: select-movie-branch.php");
+exit();
+
 // Detect flow and selected movie (if any)
 $source = $_GET['source'] ?? 'home'; // 'home' = from homepage, 'movie' = from movie page
 $movie_id = $_GET['movie'] ?? null;  // pass movie name or id if clicked from movie page

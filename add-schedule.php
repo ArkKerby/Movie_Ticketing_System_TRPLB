@@ -1,6 +1,6 @@
 <?php
 session_start();
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'mall_admin') {
     header("Location: login.php");
     exit();
 }
@@ -148,13 +148,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <aside class="sidebar">
         <div class="profile-section">
             <img src="images/brand x.png" alt="Profile Picture" class="profile-pic" />
-            <h2>Admin</h2>
+            <h2>Mall Admin</h2>
         </div>
         <nav class="sidebar-nav">
             <a href="admin-panel.php">Dashboard</a>
             <a href="add-show.php">Add Shows</a>
             <a href="view-shows.php">List Shows</a>
             <a href="view-bookings.php">List Bookings</a>
+            <a href="view-deleted-movies.php">Deleted Movies</a>
+            <a href="mall-admin/assign-movie.php">Assign Movies</a>
         </nav>
     </aside>
     <main class="main-content">
@@ -197,4 +199,3 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </main>
 </body>
 </html>
-

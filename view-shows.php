@@ -1,6 +1,6 @@
 <?php
 session_start();
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'mall_admin') {
     header("Location: login.php");
     exit();
 }
@@ -67,12 +67,6 @@ if (isset($_GET['delete']) && isset($_GET['id'])) {
                 $deleteTickets->bind_param("i", $reservationId);
                 $deleteTickets->execute();
                 $deleteTickets->close();
-                
-                // Delete PAYMENT records
-                $deletePayments = $conn->prepare("DELETE FROM PAYMENT WHERE reserve_id = ?");
-                $deletePayments->bind_param("i", $reservationId);
-                $deletePayments->execute();
-                $deletePayments->close();
                 
                 // Delete RESERVE_SEAT records
                 $deleteReserveSeats = $conn->prepare("DELETE FROM RESERVE_SEAT WHERE reservation_id = ?");
@@ -141,12 +135,6 @@ if (isset($_GET['delete']) && isset($_GET['id'])) {
             $deleteTickets->bind_param("i", $reservationId);
             $deleteTickets->execute();
             $deleteTickets->close();
-            
-            // Delete PAYMENT records
-            $deletePayments = $conn->prepare("DELETE FROM PAYMENT WHERE reserve_id = ?");
-            $deletePayments->bind_param("i", $reservationId);
-            $deletePayments->execute();
-            $deletePayments->close();
             
             // Delete RESERVE_SEAT records
             $deleteReserveSeats = $conn->prepare("DELETE FROM RESERVE_SEAT WHERE reservation_id = ?");
@@ -491,13 +479,15 @@ if ($movies_query) {
     <aside class="sidebar">
         <div class="profile-section">
             <img src="images/brand x.png" alt="Profile Picture" class="profile-pic" />
-            <h2>Admin</h2>
+            <h2>Mall Admin</h2>
         </div>
         <nav class="sidebar-nav">
             <a href="admin-panel.php">Dashboard</a>
             <a href="add-show.php">Add Shows</a>
             <a href="view-shows.php" class="active">List Shows</a>
             <a href="view-bookings.php">List Bookings</a>
+            <a href="view-deleted-movies.php">Deleted Movies</a>
+            <a href="mall-admin/assign-movie.php">Assign Movies</a>
         </nav>
     </aside>
     <main class="main-content">
@@ -573,4 +563,3 @@ if ($movies_query) {
     </main>
 </body>
 </html>
-

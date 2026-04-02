@@ -126,10 +126,10 @@ if (!empty($frontEndSeatsData)) {
     }
 } else {
     // Fallback if not passed (legacy)
-    $seatPrice = 250.00;
+    $seatPrice = 350.00;
     $seatTotal = $seatPrice * $seatCount;
     foreach ($selectedSeats as $s) {
-        $seatDetails[] = ['id' => $s, 'tier' => 'Standard', 'price' => 250.00];
+        $seatDetails[] = ['id' => $s, 'tier' => 'Standard', 'price' => 350.00];
     }
 }
 
@@ -137,6 +137,31 @@ $grandTotal = $seatTotal + $foodTotal;
 
 // Get user ID
 $userId = $_SESSION['user_id'] ?? $_SESSION['acc_id'] ?? null;
+
+// Check PWD discount eligibility
+$pwdApproved = false;
+$pwdDiscount  = 0;
+// Check Senior Citizen discount eligibility
+$seniorApproved = false;
+$seniorDiscount = 0;
+if ($userId) {
+    $discountStmt = $conn->prepare("SELECT pwd_approved, senior_approved FROM USER_ACCOUNT WHERE acc_id = ?");
+    $discountStmt->bind_param("i", $userId);
+    $discountStmt->execute();
+    $discountRow = $discountStmt->get_result()->fetch_assoc();
+    $discountStmt->close();
+    if ($discountRow) {
+        if (!empty($discountRow['pwd_approved'])) {
+            $pwdApproved = true;
+            $pwdDiscount = $seatTotal * 0.20;
+        } elseif (!empty($discountRow['senior_approved'])) {
+            $seniorApproved = true;
+            $seniorDiscount = $seatTotal * 0.20;
+        }
+    }
+}
+
+$grandTotal = $seatTotal + $foodTotal - $pwdDiscount - $seniorDiscount;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -148,6 +173,71 @@ $userId = $_SESSION['user_id'] ?? $_SESSION['acc_id'] ?? null;
     <link rel="stylesheet" href="css/checkout.css?v=<?php echo time(); ?>">
 </head>
 <body>
+    <?php
+    // PWD banner: show if user has no pending/approved application
+    $showPwdBannerCheckout = false;
+    if ($userId && !$pwdApproved && !$seniorApproved) {
+        $conn2 = getDBConnection();
+        $bannerCheckTbl = $conn2->query("SHOW TABLES LIKE 'DISCOUNT_APPLICATIONS'");
+        if ($bannerCheckTbl && $bannerCheckTbl->num_rows > 0) {
+            $bStmt = $conn2->prepare("SELECT status FROM DISCOUNT_APPLICATIONS WHERE acc_id = ? AND discount_type = 'pwd' ORDER BY submitted_at DESC LIMIT 1");
+            $bStmt->bind_param("i", $userId);
+            $bStmt->execute();
+            $bRow = $bStmt->get_result()->fetch_assoc();
+            $bStmt->close();
+            if (!$bRow || !in_array($bRow['status'], ['pending', 'approved'])) {
+                $showPwdBannerCheckout = true;
+            }
+        } else {
+            $showPwdBannerCheckout = true;
+        }
+        $conn2->close();
+    }
+    ?>
+    <?php if ($showPwdBannerCheckout): ?>
+    <div id="pwdToast" style="
+      position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-120px);
+      background:linear-gradient(135deg,#1a2a4a,#0f1e38);
+      border:1px solid rgba(85,138,206,0.45);
+      border-radius:12px;
+      padding:14px 22px;
+      display:flex;align-items:center;justify-content:space-between;gap:16px;
+      font-family:'Montserrat',sans-serif;font-size:0.88rem;
+      color:rgba(255,255,255,0.9);
+      box-shadow:0 8px 32px rgba(0,0,0,0.55),0 0 0 1px rgba(85,138,206,0.15);
+      z-index:99999;
+      min-width:320px;max-width:600px;width:90%;
+      transition:transform 0.5s cubic-bezier(0.34,1.56,0.64,1),opacity 0.5s ease;
+      opacity:0;
+    ">
+      <span>Have you submitted your PWD ID or Senior Citizen ID to have a 20% discount? <a href="profile.php#pwd" style="color:#7ab5ff;font-weight:600;text-decoration:underline;">Apply on your Profile.</a></span>
+      <button onclick="dismissPwdToast()" style="background:none;border:none;color:rgba(255,255,255,0.45);cursor:pointer;font-size:1rem;padding:0 2px;line-height:1;flex-shrink:0;">x</button>
+    </div>
+    <script>
+    (function(){
+      var toast = document.getElementById('pwdToast');
+      var dismissed = false;
+      function showToast(){
+        if(dismissed) return;
+        toast.style.transform = 'translateX(-50%) translateY(0)';
+        toast.style.opacity   = '1';
+        setTimeout(hideToast, 4000);
+      }
+      function hideToast(){
+        if(dismissed) return;
+        toast.style.transform = 'translateX(-50%) translateY(-120px)';
+        toast.style.opacity   = '0';
+        setTimeout(showToast, 12000);
+      }
+      window.dismissPwdToast = function(){
+        dismissed = true;
+        toast.style.transform = 'translateX(-50%) translateY(-120px)';
+        toast.style.opacity   = '0';
+      };
+      setTimeout(showToast, 800);
+    })();
+    </script>
+    <?php endif; ?>
     <!-- Header Bar with Logo -->
     <div class="checkout-header">
         <div class="logo">
@@ -170,8 +260,16 @@ $userId = $_SESSION['user_id'] ?? $_SESSION['acc_id'] ?? null;
                 <h2>Booking Summary</h2>
                 <div class="detail-row">
                     <strong>Branch:</strong>
-                    <span><?= htmlspecialchars($branchName ?: 'SM Mall of Asia') ?></span>
+                    <span><?= htmlspecialchars($branchName ?: 'TICKETIX') ?></span>
                 </div>
+                <?php
+                $cinemaNameDisplay = $bookingData['cinemaName'] ?? '';
+                if ($cinemaNameDisplay): ?>
+                <div class="detail-row">
+                    <strong>Cinema:</strong>
+                    <span><?= htmlspecialchars($cinemaNameDisplay) ?></span>
+                </div>
+                <?php endif; ?>
                 <div class="detail-row">
                     <strong>Show Date:</strong>
                     <span><?= date('F d, Y', strtotime($showDate)) ?></span>
@@ -230,6 +328,18 @@ $userId = $_SESSION['user_id'] ?? $_SESSION['acc_id'] ?? null;
                 <span>₱<?= number_format($foodTotal, 2) ?></span>
             </div>
             <?php endif; ?>
+            <?php if ($pwdApproved): ?>
+            <div class="price-row" style="color:#8ec98e;">
+                <span>PWD Discount (20% off seats):</span>
+                <span>- ₱<?= number_format($pwdDiscount, 2) ?></span>
+            </div>
+            <?php endif; ?>
+            <?php if ($seniorApproved): ?>
+            <div class="price-row" style="color:#8ec98e;">
+                <span>Senior Citizen Discount (20% off seats):</span>
+                <span>- ₱<?= number_format($seniorDiscount, 2) ?></span>
+            </div>
+            <?php endif; ?>
             <div class="price-row total">
                 <span>Grand Total:</span>
                 <span>₱<?= number_format($grandTotal, 2) ?></span>
@@ -247,6 +357,7 @@ $userId = $_SESSION['user_id'] ?? $_SESSION['acc_id'] ?? null;
             <input type="hidden" name="seat_total" value="<?= $seatTotal ?>">
             <input type="hidden" name="food_total" value="<?= $foodTotal ?>">
             <input type="hidden" name="grand_total" value="<?= $grandTotal ?>">
+            <input type="hidden" name="pwd_discount" value="<?= $pwdDiscount ?>">
             <button type="submit" class="btn-proceed">Proceed to Payment →</button>
         </form>
     </div>

@@ -832,6 +832,7 @@
 
       /* ---- Small Tablets / Large Phones (≤ 768px) ---- */
       @media (max-width: 768px) {
+
         /* Show hamburger */
         .hamburger-btn {
           display: flex;
@@ -866,6 +867,8 @@
 
         .left-section nav.mobile-open {
           display: flex;
+          z-index: 999;
+          position: relative;
         }
 
         .left-section nav a {
@@ -896,6 +899,8 @@
 
         .nav-search-form.mobile-open {
           display: flex;
+          z-index: 999;
+          position: relative;
         }
 
         .nav-search-label {
@@ -930,6 +935,8 @@
 
         .right-section.mobile-open {
           display: flex;
+          z-index: 999;
+          position: relative;
         }
 
         /* Footer responsive */

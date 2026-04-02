@@ -64,8 +64,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $update_query = "UPDATE USER_ACCOUNT SET user_status = 'online' WHERE acc_id = " . (int)$row['acc_id'];
                         $conn->query($update_query);
 
-                        // WITH THIS:
-                        if ($row['role'] === 'admin') {
+                        // Route by role
+                        if ($row['role'] === 'mall_admin') {
                             header("Location: admin-panel.php");
                         } elseif ($row['role'] === 'staff') {
                             header("Location: staff/dashboard.php");
@@ -273,6 +273,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         
         <input type="tel" name="contact" placeholder="Contact Number" pattern="[0-9]{11}" maxlength="11" required>
         <button type="submit" id="signup-btn">Sign Up</button>
+        <p class="mobile-toggle" id="mobileSignIn">Already have an account? <strong>Sign In</strong></p>
       </form>
     </div>
 
@@ -295,6 +296,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         </div>
         <button type="submit">Login</button>
         <a href="forgotpassword.php">Forgot Password?</a>
+        <p class="mobile-toggle" id="mobileSignUp">Don't have an account? <strong>Sign Up</strong></p>
       </form>
     </div>
 
@@ -327,6 +329,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     signInButton.addEventListener('click', () => {
       container.classList.remove("right-panel-active");
     });
+
+    // Mobile toggle links
+    const mobileSignUp = document.getElementById('mobileSignUp');
+    const mobileSignIn = document.getElementById('mobileSignIn');
+
+    if (mobileSignUp) {
+      mobileSignUp.addEventListener('click', () => {
+        container.classList.add('right-panel-active');
+      });
+    }
+
+    if (mobileSignIn) {
+      mobileSignIn.addEventListener('click', () => {
+        container.classList.remove('right-panel-active');
+      });
+    }
 
     // Email validation
     (function() {

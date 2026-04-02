@@ -47,7 +47,7 @@ body::before {
   /* Responsive scaling */
   width: 55vw;
   max-width: 900px;
-  min-width: 700px;
+  min-width: 320px;
   height: 85vh;
   max-height: none;
   min-height: 480px;
@@ -325,15 +325,86 @@ button.ghost {
   text-decoration: underline;
 }
 
+/* Mobile toggle link - hidden on desktop */
+.mobile-toggle {
+  display: none;
+  margin-top: 15px;
+  color: #b0d4f1;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 400;
+  user-select: none;
+}
+
+.mobile-toggle strong {
+  color: #558ace;
+  font-weight: 700;
+}
+
 @media (max-width: 700px) {
   .container {
-    width: 90vw;
+    width: 95vw;
     min-width: 0;
+    height: auto;
+    min-height: auto;
+    max-height: 95vh;
+    overflow-y: auto;
+  }
+
+  /* Hide the overlay panel on mobile */
+  .overlay-container {
+    display: none;
+  }
+
+  /* Make forms take full width */
+  .sign-in-container,
+  .sign-up-container {
+    width: 100%;
+    position: relative;
+  }
+
+  .sign-up-container {
+    display: none;
+  }
+
+  .container.right-panel-active .sign-in-container {
+    display: none;
+    transform: none;
+    visibility: hidden;
+  }
+
+  .container.right-panel-active .sign-up-container {
+    display: block;
+    transform: none;
+    opacity: 1;
+    visibility: visible;
+    position: relative;
+  }
+
+  form {
+    padding: 30px 25px;
+    padding-bottom: 40px !important;
+    min-height: 400px;
+  }
+
+  .sign-up-container form {
+    padding: 20px 25px;
+    padding-bottom: 40px !important;
+  }
+
+  /* Show toggle links on mobile since overlay is hidden */
+  .mobile-toggle {
+    display: block;
+    margin-top: 15px;
+    color: #b0d4f1;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 400;
   }
 }
 
 /* 💻 1366x768 Monitors */
-@media (max-width: 1366px) {
+@media (min-width: 701px) and (max-width: 1366px) {
   .container {
     max-width: 850px;
     height: 75vh;

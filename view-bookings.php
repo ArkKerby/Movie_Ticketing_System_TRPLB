@@ -1,19 +1,21 @@
 <?php
 session_start();
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'mall_admin') {
     header("Location: login.php");
     exit();
 }
 
 require_once __DIR__ . '/config.php';
+// Auto-approve pending bookings within 1hr of showtime
+require_once __DIR__ . '/auto-approve-bookings.php';
 $conn = getDBConnection();
 
 // Ensure payment_status column supports 'refunded'
-$paymentStatusColumn = $conn->query("SHOW COLUMNS FROM PAYMENT LIKE 'payment_status'");
+$paymentStatusColumn = $conn->query("SHOW COLUMNS FROM TICKET LIKE 'payment_status'");
 if ($paymentStatusColumn && $paymentStatusColumn->num_rows > 0) {
     $paymentStatusInfo = $paymentStatusColumn->fetch_assoc();
     if (strpos($paymentStatusInfo['Type'], "'refunded'") === false) {
-        $conn->query("ALTER TABLE PAYMENT MODIFY COLUMN payment_status ENUM('paid','pending','not-yet','refunded') DEFAULT 'pending'");
+        $conn->query("ALTER TABLE TICKET MODIFY COLUMN payment_status ENUM('paid','pending','not-yet','refunded') DEFAULT 'pending'");
     }
 }
 
@@ -73,17 +75,17 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
                 $ticketStmt->execute();
                 $ticketStmt->close();
 
-                // Update payment status to refunded
+                // Update payment status to refunded (payment columns now in TICKET)
                 $paymentStmt = $conn->prepare("
-                    UPDATE PAYMENT p
-                    JOIN RESERVE r ON p.reserve_id = r.reservation_id
-                    SET p.payment_status = 'refunded',
-                        p.reference_number = CASE
-                            WHEN p.reference_number IS NULL OR p.reference_number = '' THEN CONCAT('REFUND-', UUID())
-                            WHEN p.reference_number LIKE 'REFUND-%' THEN p.reference_number
-                            ELSE CONCAT('REFUND-', p.reference_number)
+                    UPDATE TICKET t
+                    JOIN RESERVE r ON t.reserve_id = r.reservation_id
+                    SET t.payment_status = 'refunded',
+                        t.reference_number = CASE
+                            WHEN t.reference_number IS NULL OR t.reference_number = '' THEN CONCAT('REFUND-', UUID())
+                            WHEN t.reference_number LIKE 'REFUND-%' THEN t.reference_number
+                            ELSE CONCAT('REFUND-', t.reference_number)
                         END,
-                        p.payment_date = NOW()
+                        t.payment_date = NOW()
                     WHERE r.reservation_id = ?
                 ");
                 $paymentStmt->bind_param("i", $id);
@@ -98,6 +100,39 @@ if (isset($_GET['action']) && isset($_GET['id'])) {
             exit();
         }
     }
+}
+
+// Handle delete old bookings
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_old_bookings'])) {
+    $today = date('Y-m-d');
+    
+    // Find old booking IDs: declined/cancelled OR past show dates
+    $oldBookings = $conn->query("
+        SELECT r.reservation_id
+        FROM RESERVE r
+        LEFT JOIN MOVIE_SCHEDULE ms ON r.schedule_id = ms.schedule_id
+        WHERE r.booking_status IN ('declined')
+           OR (ms.show_date IS NOT NULL AND ms.show_date < '$today')
+    ");
+    
+    $deletedCount = 0;
+    if ($oldBookings && $oldBookings->num_rows > 0) {
+        $ids = [];
+        while ($row = $oldBookings->fetch_assoc()) {
+            $ids[] = intval($row['reservation_id']);
+        }
+        $idList = implode(',', $ids);
+        
+        // Delete in order: TICKET_FOOD → TICKET → RESERVE_SEAT → RESERVE
+        $conn->query("DELETE tf FROM TICKET_FOOD tf INNER JOIN TICKET t ON tf.ticket_id = t.ticket_id WHERE t.reserve_id IN ($idList)");
+        $conn->query("DELETE FROM TICKET WHERE reserve_id IN ($idList)");
+        $conn->query("DELETE FROM RESERVE_SEAT WHERE reservation_id IN ($idList)");
+        $conn->query("DELETE FROM RESERVE WHERE reservation_id IN ($idList)");
+        $deletedCount = count($ids);
+    }
+    
+    header("Location: view-bookings.php?success=" . urlencode("Deleted $deletedCount old booking(s) successfully."));
+    exit();
 }
 
 // Check for success message
@@ -130,15 +165,15 @@ $bookings_query = $conn->query("
         m.title AS movie_title,
         ms.show_date,
         ms.show_hour,
-        p.payment_status,
-        p.amount_paid,
-        p.payment_type,
-        p.payment_date
+        t2.payment_status,
+        t2.amount_paid,
+        t2.payment_type,
+        t2.payment_date
     FROM RESERVE r
     LEFT JOIN USER_ACCOUNT u ON r.acc_id = u.acc_id
     LEFT JOIN MOVIE_SCHEDULE ms ON r.schedule_id = ms.schedule_id
     LEFT JOIN MOVIE m ON ms.movie_show_id = m.movie_show_id
-    LEFT JOIN PAYMENT p ON r.reservation_id = p.reserve_id
+    LEFT JOIN TICKET t2 ON r.reservation_id = t2.reserve_id
     ORDER BY r.reserve_date DESC
 ");
 
@@ -294,18 +329,24 @@ if ($bookings_query) {
     <aside class="sidebar">
         <div class="profile-section">
             <img src="images/brand x.png" alt="Profile Picture" class="profile-pic" />
-            <h2>Admin</h2>
+            <h2>Mall Admin</h2>
         </div>
         <nav class="sidebar-nav">
             <a href="admin-panel.php">Dashboard</a>
             <a href="add-show.php">Add Shows</a>
             <a href="view-shows.php">List Shows</a>
             <a href="view-bookings.php" class="active">List Bookings</a>
+            <a href="view-deleted-movies.php">Deleted Movies</a>
+            <a href="mall-admin/assign-movie.php">Assign Movies</a>
         </nav>
     </aside>
     <main class="main-content">
-        <header>
+        <header style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
             <h1>View <span class="highlight">Bookings</span></h1>
+            <form method="POST" style="margin:0;">
+                <input type="hidden" name="delete_old_bookings" value="1">
+                <button type="submit" onclick="return confirm('This will permanently delete all declined bookings and bookings with past show dates. Continue?')" style="background:#dc3545;color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.9em;transition:background 0.3s;"> Delete Old Bookings</button>
+            </form>
         </header>
 
         <div class="bookings-container">
@@ -405,4 +446,3 @@ if ($bookings_query) {
     </main>
 </body>
 </html>
-

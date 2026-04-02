@@ -3,6 +3,174 @@ session_start();
 require_once __DIR__ . '/config.php';
 $conn = getDBConnection();
 
+// Handle PWD discount application
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_pwd_discount'])) {
+    $userId = $_SESSION['user_id'] ?? $_SESSION['acc_id'] ?? null;
+    $pwdIdNumber = trim($_POST['pwd_id_number'] ?? '');
+    $agreement = isset($_POST['pwd_agreement']) ? 1 : 0;
+
+    if (!$agreement) {
+        $message = 'You must agree to the terms before submitting.';
+        $messageType = 'error';
+    } elseif (empty($pwdIdNumber)) {
+        $message = 'PWD ID number is required.';
+        $messageType = 'error';
+    } elseif (!isset($_FILES['pwd_id_image']) || $_FILES['pwd_id_image']['error'] !== UPLOAD_ERR_OK) {
+        $message = 'Please upload your PWD ID image.';
+        $messageType = 'error';
+    } else {
+        $file = $_FILES['pwd_id_image'];
+        $allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+        $allowedExts  = ['png', 'jpg', 'jpeg'];
+        $fileExt = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        $fileMime = mime_content_type($file['tmp_name']);
+
+        if (!in_array($fileMime, $allowedTypes) || !in_array($fileExt, $allowedExts)) {
+            $message = 'Only PNG, JPG, and JPEG images are allowed.';
+            $messageType = 'error';
+        } elseif ($file['size'] > 5 * 1024 * 1024) {
+            $message = 'Image file must be 5MB or less.';
+            $messageType = 'error';
+        } else {
+            // Check existing application
+            $chkStmt = $conn->prepare("SELECT app_id, status FROM DISCOUNT_APPLICATIONS WHERE acc_id = ? AND discount_type = 'pwd' ORDER BY submitted_at DESC LIMIT 1");
+            $chkStmt->bind_param("i", $userId);
+            $chkStmt->execute();
+            $chkResult = $chkStmt->get_result();
+            $existingApp = $chkResult->fetch_assoc();
+            $chkStmt->close();
+
+            if ($existingApp && in_array($existingApp['status'], ['pending', 'approved'])) {
+                $message = 'You already have a ' . $existingApp['status'] . ' application.';
+                $messageType = 'error';
+            } else {
+                // Save file
+                $uploadDir = __DIR__ . '/uploads/pwd_ids/';
+                $fileName  = 'pwd_' . $userId . '_' . time() . '.' . $fileExt;
+                $filePath  = $uploadDir . $fileName;
+                if (move_uploaded_file($file['tmp_name'], $filePath)) {
+                    $relPath = 'uploads/pwd_ids/' . $fileName;
+                    // Insert application
+                    $ins = $conn->prepare("INSERT INTO DISCOUNT_APPLICATIONS (acc_id, discount_type, id_number, id_image, status) VALUES (?, 'pwd', ?, ?, 'pending')");
+                    $ins->bind_param("iss", $userId, $pwdIdNumber, $relPath);
+                    if ($ins->execute()) {
+                        $newAppId = $conn->insert_id;
+                        $ins->close();
+                        // Fetch user name for notification
+                        $uStmt = $conn->prepare("SELECT firstName, lastName FROM USER_ACCOUNT WHERE acc_id = ?");
+                        $uStmt->bind_param("i", $userId);
+                        $uStmt->execute();
+                        $uRow = $uStmt->get_result()->fetch_assoc();
+                        $uStmt->close();
+                        $userName = trim(($uRow['firstName'] ?? '') . ' ' . ($uRow['lastName'] ?? ''));
+                        $notifMsg = "User $userName has submitted a PWD discount application. PWD ID: $pwdIdNumber";
+                        $nStmt = $conn->prepare("INSERT INTO ADMIN_NOTIFICATIONS (type, message, reference_id) VALUES ('pwd_application', ?, ?)");
+                        $nStmt->bind_param("si", $notifMsg, $newAppId);
+                        $nStmt->execute();
+                        $nStmt->close();
+                        $message = 'Your PWD discount application has been submitted and is under review.';
+                        $messageType = 'success';
+                    } else {
+                        $message = 'Error submitting application: ' . $conn->error;
+                        $messageType = 'error';
+                    }
+                } else {
+                    $message = 'Failed to upload image. Please try again.';
+                    $messageType = 'error';
+                }
+            }
+        }
+    }
+}
+
+// Handle Senior Citizen discount application
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_senior_discount'])) {
+    $userId = $_SESSION['user_id'] ?? $_SESSION['acc_id'] ?? null;
+    $seniorIdNumber = trim($_POST['senior_id_number'] ?? '');
+    $seniorAgreement = isset($_POST['senior_agreement']) ? 1 : 0;
+
+    if (!$seniorAgreement) {
+        $message = 'You must agree to the terms before submitting.';
+        $messageType = 'error';
+    } elseif (empty($seniorIdNumber)) {
+        $message = 'Senior Citizen ID number is required.';
+        $messageType = 'error';
+    } elseif (!isset($_FILES['senior_id_image']) || $_FILES['senior_id_image']['error'] !== UPLOAD_ERR_OK) {
+        $message = 'Please upload your Senior Citizen ID image.';
+        $messageType = 'error';
+    } else {
+        // Check if PWD is already approved (can't have both)
+        $pwdCheckStmt = $conn->prepare("SELECT pwd_approved FROM USER_ACCOUNT WHERE acc_id = ?");
+        $pwdCheckStmt->bind_param("i", $userId);
+        $pwdCheckStmt->execute();
+        $pwdCheckRow = $pwdCheckStmt->get_result()->fetch_assoc();
+        $pwdCheckStmt->close();
+
+        if ($pwdCheckRow && !empty($pwdCheckRow['pwd_approved'])) {
+            $message = 'You already have an approved PWD discount. You cannot have both PWD and Senior discounts.';
+            $messageType = 'error';
+        } else {
+            $file = $_FILES['senior_id_image'];
+            $allowedTypes = ['image/png', 'image/jpeg', 'image/jpg'];
+            $allowedExts  = ['png', 'jpg', 'jpeg'];
+            $fileExt = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            $fileMime = mime_content_type($file['tmp_name']);
+
+            if (!in_array($fileMime, $allowedTypes) || !in_array($fileExt, $allowedExts)) {
+                $message = 'Only PNG, JPG, and JPEG images are allowed.';
+                $messageType = 'error';
+            } elseif ($file['size'] > 5 * 1024 * 1024) {
+                $message = 'Image file must be 5MB or less.';
+                $messageType = 'error';
+            } else {
+                $chkStmt = $conn->prepare("SELECT app_id, status FROM DISCOUNT_APPLICATIONS WHERE acc_id = ? AND discount_type = 'senior' ORDER BY submitted_at DESC LIMIT 1");
+                $chkStmt->bind_param("i", $userId);
+                $chkStmt->execute();
+                $existingApp = $chkStmt->get_result()->fetch_assoc();
+                $chkStmt->close();
+
+                if ($existingApp && in_array($existingApp['status'], ['pending', 'approved'])) {
+                    $message = 'You already have a ' . $existingApp['status'] . ' Senior Citizen application.';
+                    $messageType = 'error';
+                } else {
+                    $uploadDir = __DIR__ . '/uploads/senior_ids/';
+                    if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+                    $fileName  = 'senior_' . $userId . '_' . time() . '.' . $fileExt;
+                    $filePath  = $uploadDir . $fileName;
+                    if (move_uploaded_file($file['tmp_name'], $filePath)) {
+                        $relPath = 'uploads/senior_ids/' . $fileName;
+                        $ins = $conn->prepare("INSERT INTO DISCOUNT_APPLICATIONS (acc_id, discount_type, id_number, id_image, status) VALUES (?, 'senior', ?, ?, 'pending')");
+                        $ins->bind_param("iss", $userId, $seniorIdNumber, $relPath);
+                        if ($ins->execute()) {
+                            $newAppId = $conn->insert_id;
+                            $ins->close();
+                            $uStmt = $conn->prepare("SELECT firstName, lastName FROM USER_ACCOUNT WHERE acc_id = ?");
+                            $uStmt->bind_param("i", $userId);
+                            $uStmt->execute();
+                            $uRow = $uStmt->get_result()->fetch_assoc();
+                            $uStmt->close();
+                            $userName = trim(($uRow['firstName'] ?? '') . ' ' . ($uRow['lastName'] ?? ''));
+                            $notifMsg = "User $userName has submitted a Senior Citizen discount application. Senior ID: $seniorIdNumber";
+                            $nStmt = $conn->prepare("INSERT INTO ADMIN_NOTIFICATIONS (type, message, reference_id) VALUES ('senior_application', ?, ?)");
+                            $nStmt->bind_param("si", $notifMsg, $newAppId);
+                            $nStmt->execute();
+                            $nStmt->close();
+                            $message = 'Your Senior Citizen discount application has been submitted and is under review.';
+                            $messageType = 'success';
+                        } else {
+                            $message = 'Error submitting application: ' . $conn->error;
+                            $messageType = 'error';
+                        }
+                    } else {
+                        $message = 'Failed to upload image. Please try again.';
+                        $messageType = 'error';
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Check if user is logged in
 if (!isset($_SESSION['logged_in']) || !$_SESSION['logged_in']) {
     header("Location: login.php");
@@ -18,13 +186,6 @@ if (!$userId) {
 
 $message = '';
 $messageType = '';
-
-// Read flash message from session (Post/Redirect/Get pattern)
-if (isset($_SESSION['profile_message'])) {
-    $message = $_SESSION['profile_message'];
-    $messageType = $_SESSION['profile_message_type'] ?? 'success';
-    unset($_SESSION['profile_message'], $_SESSION['profile_message_type']);
-}
 
 // Handle payment method operations
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -126,81 +287,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// Handle PWD discount application
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_pwd_application'])) {
-    $pwdIdNumber = trim($_POST['pwd_id_number'] ?? '');
-    
-    if (empty($pwdIdNumber)) {
-        $message = "PWD ID Number is required.";
-        $messageType = 'error';
-    } elseif (empty($_FILES['pwd_id_image']['name'])) {
-        $message = "PWD ID Photo is required.";
-        $messageType = 'error';
-    } else {
-        // Upload image
-        $uploadDir = __DIR__ . '/uploads/pwd/';
-        if (!is_dir($uploadDir)) {
-            mkdir($uploadDir, 0755, true);
-        }
-        $ext = strtolower(pathinfo($_FILES['pwd_id_image']['name'], PATHINFO_EXTENSION));
-        $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-        if (!in_array($ext, $allowed)) {
-            $message = "Invalid image format. Please upload JPG, PNG, GIF, or WebP.";
-            $messageType = 'error';
-        } else {
-            $filename = 'pwd_' . $userId . '_' . date('YmdHis') . '.' . $ext;
-            $destPath = $uploadDir . $filename;
-            $dbImagePath = 'uploads/pwd/' . $filename;
-
-            if (move_uploaded_file($_FILES['pwd_id_image']['tmp_name'], $destPath)) {
-                // Check if PWD_APPLICATIONS table exists
-                $tableCheck = $conn->query("SHOW TABLES LIKE 'PWD_APPLICATIONS'");
-                if ($tableCheck && $tableCheck->num_rows > 0) {
-                    // Check for existing pending application
-                    $checkStmt = $conn->prepare("SELECT pwd_app_id FROM PWD_APPLICATIONS WHERE acc_id = ? AND status = 'pending' LIMIT 1");
-                    $checkStmt->bind_param("i", $userId);
-                    $checkStmt->execute();
-                    $existingApp = $checkStmt->get_result()->fetch_assoc();
-                    $checkStmt->close();
-
-                    if ($existingApp) {
-                        $message = "You already have a pending PWD application. Please wait for admin review.";
-                        $messageType = 'error';
-                    } else {
-                        $stmt = $conn->prepare("INSERT INTO PWD_APPLICATIONS (acc_id, pwd_id_number, pwd_id_image, status, submitted_at) VALUES (?, ?, ?, 'pending', NOW())");
-                        $stmt->bind_param("iss", $userId, $pwdIdNumber, $dbImagePath);
-                        if ($stmt->execute()) {
-                            $pwdAppId = $conn->insert_id;
-                            // Create admin notification
-                            $notifTableCheck = $conn->query("SHOW TABLES LIKE 'ADMIN_NOTIFICATIONS'");
-                            if ($notifTableCheck && $notifTableCheck->num_rows > 0) {
-                                $notifMsg = "New PWD discount application submitted by user #$userId (PWD ID: $pwdIdNumber)";
-                                $notifType = 'pwd_application';
-                                $nStmt = $conn->prepare("INSERT INTO ADMIN_NOTIFICATIONS (type, message, reference_id, created_at) VALUES (?, ?, ?, NOW())");
-                                $nStmt->bind_param("ssi", $notifType, $notifMsg, $pwdAppId);
-                                $nStmt->execute();
-                                $nStmt->close();
-                            }
-                            $message = "PWD discount application submitted successfully! Admin will review it shortly.";
-                            $messageType = 'success';
-                        } else {
-                            $message = "Error submitting application: " . $conn->error;
-                            $messageType = 'error';
-                        }
-                        $stmt->close();
-                    }
-                } else {
-                    $message = "PWD applications feature is not yet set up. Please contact admin.";
-                    $messageType = 'error';
-                }
-            } else {
-                $message = "Error uploading image. Please try again.";
-                $messageType = 'error';
-            }
-        }
-    }
-}
-
 // Handle profile update
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     $firstName = trim($_POST['firstName'] ?? '');
@@ -243,16 +329,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
     }
 }
 
-// After any POST, redirect to prevent resubmission on refresh
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $message) {
-    $_SESSION['profile_message'] = $message;
-    $_SESSION['profile_message_type'] = $messageType;
-    header("Location: profile.php");
-    exit();
-}
-
 // Get user data (including fullName / display name)
-$stmt = $conn->prepare("SELECT acc_id, firstName, lastName, fullName, email, contNo, address, birthdate, time_created FROM USER_ACCOUNT WHERE acc_id = ?");
+$checkFN = $conn->query("SHOW COLUMNS FROM USER_ACCOUNT LIKE 'fullName'");
+$hasFN = $checkFN && $checkFN->num_rows > 0;
+
+if ($hasFN) {
+    $stmt = $conn->prepare("SELECT acc_id, firstName, lastName, fullName, email, contNo, address, birthdate, time_created FROM USER_ACCOUNT WHERE acc_id = ?");
+} else {
+    $stmt = $conn->prepare("SELECT acc_id, firstName, lastName, email, contNo, address, birthdate, time_created FROM USER_ACCOUNT WHERE acc_id = ?");
+}
 $stmt->bind_param("i", $userId);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -271,31 +356,20 @@ while ($row = $paymentMethodsResult->fetch_assoc()) {
 $stmt->close();
 
 // Get PWD application status
-$pwdStatus = null;
 $pwdApp = null;
-$tableCheck = $conn->query("SHOW TABLES LIKE 'PWD_APPLICATIONS'");
-if ($tableCheck && $tableCheck->num_rows > 0) {
-    $stmt = $conn->prepare("SELECT * FROM PWD_APPLICATIONS WHERE acc_id = ? ORDER BY submitted_at DESC LIMIT 1");
-    $stmt->bind_param("i", $userId);
-    $stmt->execute();
-    $pwdApp = $stmt->get_result()->fetch_assoc();
-    $stmt->close();
-    if ($pwdApp) {
-        $pwdStatus = $pwdApp['status'];
-    }
-}
+$pStmt = $conn->prepare("SELECT *, id_number AS pwd_id_number, id_image AS pwd_id_image FROM DISCOUNT_APPLICATIONS WHERE acc_id = ? AND discount_type = 'pwd' ORDER BY submitted_at DESC LIMIT 1");
+$pStmt->bind_param("i", $userId);
+$pStmt->execute();
+$pwdApp = $pStmt->get_result()->fetch_assoc();
+$pStmt->close();
 
-// Check if user has pwd_approved flag
-$pwdApproved = false;
-$colCheck = $conn->query("SHOW COLUMNS FROM USER_ACCOUNT LIKE 'pwd_approved'");
-if ($colCheck && $colCheck->num_rows > 0) {
-    $stmt = $conn->prepare("SELECT pwd_approved FROM USER_ACCOUNT WHERE acc_id = ?");
-    $stmt->bind_param("i", $userId);
-    $stmt->execute();
-    $pwdRow = $stmt->get_result()->fetch_assoc();
-    $pwdApproved = ($pwdRow['pwd_approved'] ?? 0) == 1;
-    $stmt->close();
-}
+// Get Senior Citizen application status
+$seniorApp = null;
+$sStmt = $conn->prepare("SELECT *, id_number AS senior_id_number, id_image AS senior_id_image FROM DISCOUNT_APPLICATIONS WHERE acc_id = ? AND discount_type = 'senior' ORDER BY submitted_at DESC LIMIT 1");
+$sStmt->bind_param("i", $userId);
+$sStmt->execute();
+$seniorApp = $sStmt->get_result()->fetch_assoc();
+$sStmt->close();
 
 $conn->close();
 
@@ -355,7 +429,7 @@ $birthdateFormatted = $user['birthdate'] ? date('Y-m-d', strtotime($user['birthd
             </div>
         </div>
 
-        <form method="POST" action="">
+        <form method="POST" action="" enctype="multipart/form-data">
             <div class="form-row">
                 <div class="form-group">
                     <label for="firstName">First Name *</label>
@@ -403,22 +477,22 @@ $birthdateFormatted = $user['birthdate'] ? date('Y-m-d', strtotime($user['birthd
                             <div class="payment-method-row">
                                 <div>
                                     <?php if ($method['payment_type'] === 'gcash'): ?>
-                                        <strong>📱 GCash</strong>
+                                        <strong> GCash</strong>
                                         <div class="payment-method-detail">
                                             Number: <?= htmlspecialchars($method['gcash_number']) ?>
                                         </div>
                                     <?php elseif ($method['payment_type'] === 'grabpay'): ?>
-                                        <strong>📱 GrabPay</strong>
+                                        <strong> GrabPay</strong>
                                         <div class="payment-method-detail">
                                             Number: <?= htmlspecialchars($method['gcash_number']) ?>
                                         </div>
                                     <?php elseif ($method['payment_type'] === 'paymaya'): ?>
-                                        <strong>📱 PayMaya</strong>
+                                        <strong> PayMaya</strong>
                                         <div class="payment-method-detail">
                                             Number: <?= htmlspecialchars($method['gcash_number']) ?>
                                         </div>
                                     <?php elseif ($method['payment_type'] === 'paypal'): ?>
-                                        <strong>📧 PayPal</strong>
+                                        <strong> PayPal</strong>
                                         <div class="payment-method-detail">
                                             Email: <?= htmlspecialchars($method['paypal_email']) ?>
                                         </div>
@@ -515,72 +589,121 @@ $birthdateFormatted = $user['birthdate'] ? date('Y-m-d', strtotime($user['birthd
         </div>
 
         <!-- PWD Discount Application Section -->
-        <div class="payment-methods-section" style="margin-top:30px;">
+        <div class="pwd-section">
             <h2>PWD Discount Application</h2>
-            <p style="color:rgba(255,255,255,0.5);font-size:0.9rem;margin-bottom:20px;">Submit your PWD ID to receive a 20% discount on seat prices. Admin will review your application.</p>
+            <p class="pwd-intro">Persons with Disabilities (PWD) are entitled to a <strong>20% discount</strong> on seat prices. Submit your PWD Card / PWD ID below to apply.</p>
 
-            <?php if ($pwdApproved): ?>
-                <div style="background:rgba(46,204,113,0.12);border:1px solid rgba(46,204,113,0.4);border-radius:10px;padding:20px;text-align:center;">
-                    <div style="font-size:28px;margin-bottom:8px;">✓</div>
-                    <div style="font-size:16px;font-weight:700;color:#2ecc71;margin-bottom:4px;">PWD Discount Active</div>
-                    <div style="font-size:13px;color:rgba(255,255,255,0.5);">Your PWD discount (20% off seats) is applied automatically at checkout.</div>
-                    <?php if ($pwdApp): ?>
-                        <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:8px;">PWD ID: <?= htmlspecialchars($pwdApp['pwd_id_number']) ?></div>
-                    <?php endif; ?>
+            <?php if ($pwdApp && $pwdApp['status'] === 'approved'): ?>
+                <div class="pwd-status approved">
+                    Your PWD discount (20% off seats) is <strong>active and approved</strong>. The discount will be automatically applied at checkout.
                 </div>
-            <?php elseif ($pwdStatus === 'pending'): ?>
-                <div style="background:rgba(255,193,7,0.12);border:1px solid rgba(255,193,7,0.3);border-radius:10px;padding:20px;text-align:center;">
-                    <div style="font-size:28px;margin-bottom:8px;">⏳</div>
-                    <div style="font-size:16px;font-weight:700;color:#ffd966;margin-bottom:4px;">Application Pending</div>
-                    <div style="font-size:13px;color:rgba(255,255,255,0.5);">Your PWD discount application is being reviewed by admin.</div>
-                    <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:8px;">PWD ID: <?= htmlspecialchars($pwdApp['pwd_id_number']) ?> · Submitted: <?= date('M d, Y', strtotime($pwdApp['submitted_at'])) ?></div>
+            <?php elseif ($pwdApp && $pwdApp['status'] === 'pending'): ?>
+                <div class="pwd-status pending">
+                    Your PWD discount application is <strong>under review</strong>. You submitted PWD ID: <strong><?= htmlspecialchars($pwdApp['pwd_id_number']) ?></strong>. Please wait for admin approval.
                 </div>
-            <?php elseif ($pwdStatus === 'rejected'): ?>
-                <div style="background:rgba(244,67,54,0.1);border:1px solid rgba(244,67,54,0.3);border-radius:10px;padding:16px;margin-bottom:20px;text-align:center;">
-                    <div style="font-size:14px;color:#ff8a8a;font-weight:600;">Previous application was rejected</div>
+            <?php elseif ($pwdApp && $pwdApp['status'] === 'rejected'): ?>
+                <div class="pwd-status rejected">
+                    Your previous PWD application was <strong>rejected</strong>.
                     <?php if (!empty($pwdApp['admin_notes'])): ?>
-                        <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;">Reason: <?= htmlspecialchars($pwdApp['admin_notes']) ?></div>
+                        Reason: <?= htmlspecialchars($pwdApp['admin_notes']) ?>
                     <?php endif; ?>
-                    <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;">You may resubmit below.</div>
+                    You may re-apply below.
+                </div>
+                <?php // fall through to show form ?>
+            <?php endif; ?>
+
+            <?php if (!$pwdApp || $pwdApp['status'] === 'rejected'): ?>
+            <form method="POST" action="" enctype="multipart/form-data" class="pwd-form">
+                <div class="form-group">
+                    <label for="pwd_id_number">PWD Card / PWD ID Number *</label>
+                    <input type="text" id="pwd_id_number" name="pwd_id_number" placeholder="Enter your PWD ID number (e.g. 2024-001234)" required>
                 </div>
 
-                <div class="add-payment-method">
-                    <h3>Resubmit PWD Application</h3>
-                    <form method="POST" enctype="multipart/form-data">
-                        <div class="form-group">
-                            <label for="pwd_id_number">PWD ID Number *</label>
-                            <input type="text" id="pwd_id_number" name="pwd_id_number" placeholder="Enter your PWD ID Number" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="pwd_id_image">PWD ID Photo *</label>
-                            <input type="file" id="pwd_id_image" name="pwd_id_image" accept="image/*" required onchange="previewPwdImg(this)" style="color:rgba(255,255,255,0.7);">
-                            <small>Upload a clear photo of your PWD ID card</small>
-                            <div id="pwdImgPreview" style="display:none;margin-top:10px;text-align:center;">
-                                <img id="pwdPreviewImg" src="" alt="Preview" style="max-width:100%;max-height:180px;border-radius:8px;border:2px solid rgba(85,138,206,0.4);">
-                            </div>
-                        </div>
-                        <button type="submit" name="submit_pwd_application" class="btn btn-primary">Submit PWD Application</button>
-                    </form>
+                <div class="form-group">
+                    <label for="pwd_id_image">Upload PWD ID Image * (PNG, JPG, or JPEG only, max 5MB)</label>
+                    <input type="file" id="pwd_id_image" name="pwd_id_image" accept=".png,.jpg,.jpeg,image/png,image/jpeg" required>
+                    <small>Only PNG, JPG, and JPEG image files are accepted. The image must clearly show your PWD ID card.</small>
                 </div>
-            <?php else: ?>
-                <div class="add-payment-method">
-                    <h3>Apply for PWD Discount</h3>
-                    <form method="POST" enctype="multipart/form-data">
-                        <div class="form-group">
-                            <label for="pwd_id_number">PWD ID Number *</label>
-                            <input type="text" id="pwd_id_number" name="pwd_id_number" placeholder="Enter your PWD ID Number" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="pwd_id_image">PWD ID Photo *</label>
-                            <input type="file" id="pwd_id_image" name="pwd_id_image" accept="image/*" required onchange="previewPwdImg(this)" style="color:rgba(255,255,255,0.7);">
-                            <small>Upload a clear photo of your PWD ID card</small>
-                            <div id="pwdImgPreview" style="display:none;margin-top:10px;text-align:center;">
-                                <img id="pwdPreviewImg" src="" alt="Preview" style="max-width:100%;max-height:180px;border-radius:8px;border:2px solid rgba(85,138,206,0.4);">
-                            </div>
-                        </div>
-                        <button type="submit" name="submit_pwd_application" class="btn btn-primary">Submit PWD Application</button>
-                    </form>
+
+                <div class="form-group pwd-agreement">
+                    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:normal;">
+                        <input type="checkbox" name="pwd_agreement" id="pwd_agreement" style="width:auto;margin-top:3px;" required>
+                        <span>I certify that the information and PWD ID I am submitting is genuine and authentic. I understand that submitting false information may result in account suspension and revocation of the discount. By submitting, I give Ticketix permission to verify my PWD status.</span>
+                    </label>
                 </div>
+
+                <button type="submit" name="apply_pwd_discount" class="btn btn-primary" id="pwdSubmitBtn" disabled>Submit PWD Application</button>
+            </form>
+            <script>
+            (function(){
+                var cb = document.getElementById('pwd_agreement');
+                var btn = document.getElementById('pwdSubmitBtn');
+                if(cb && btn){
+                    cb.addEventListener('change', function(){ btn.disabled = !this.checked; });
+                }
+            })();
+            </script>
+            <?php endif; ?>
+        </div>
+
+        <!-- Senior Citizen Discount Application Section -->
+        <div class="pwd-section" id="senior">
+            <h2>Senior Citizen Discount Application</h2>
+            <p class="pwd-intro">Senior Citizens (60 years old and above) are entitled to a <strong>20% discount</strong> on seat prices. Submit your Senior Citizen ID below to apply.</p>
+
+            <?php if ($pwdApp && $pwdApp['status'] === 'approved'): ?>
+                <div class="pwd-status pending">
+                    You already have an <strong>approved PWD discount</strong>. You cannot combine PWD and Senior Citizen discounts.
+                </div>
+            <?php elseif ($seniorApp && $seniorApp['status'] === 'approved'): ?>
+                <div class="pwd-status approved">
+                    Your Senior Citizen discount (20% off seats) is <strong>active and approved</strong>. The discount will be automatically applied at checkout.
+                </div>
+            <?php elseif ($seniorApp && $seniorApp['status'] === 'pending'): ?>
+                <div class="pwd-status pending">
+                    Your Senior Citizen discount application is <strong>under review</strong>. You submitted Senior Citizen ID: <strong><?= htmlspecialchars($seniorApp['senior_id_number']) ?></strong>. Please wait for admin approval.
+                </div>
+            <?php elseif ($seniorApp && $seniorApp['status'] === 'rejected'): ?>
+                <div class="pwd-status rejected">
+                    Your previous Senior Citizen application was <strong>rejected</strong>.
+                    <?php if (!empty($seniorApp['admin_notes'])): ?>
+                        Reason: <?= htmlspecialchars($seniorApp['admin_notes']) ?>
+                    <?php endif; ?>
+                    You may re-apply below.
+                </div>
+            <?php endif; ?>
+
+            <?php if (!($pwdApp && $pwdApp['status'] === 'approved') && (!$seniorApp || $seniorApp['status'] === 'rejected')): ?>
+            <form method="POST" action="" enctype="multipart/form-data" class="pwd-form">
+                <div class="form-group">
+                    <label for="senior_id_number">Senior Citizen ID Number *</label>
+                    <input type="text" id="senior_id_number" name="senior_id_number" placeholder="Enter your Senior Citizen ID number" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="senior_id_image">Upload Senior Citizen ID Image * (PNG, JPG, or JPEG only, max 5MB)</label>
+                    <input type="file" id="senior_id_image" name="senior_id_image" accept=".png,.jpg,.jpeg,image/png,image/jpeg" required>
+                    <small>Only PNG, JPG, and JPEG image files are accepted. The image must clearly show your Senior Citizen ID.</small>
+                </div>
+
+                <div class="form-group pwd-agreement">
+                    <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-weight:normal;">
+                        <input type="checkbox" name="senior_agreement" id="senior_agreement" style="width:auto;margin-top:3px;" required>
+                        <span>I certify that the information and Senior Citizen ID I am submitting is genuine and authentic. I understand that submitting false information may result in account suspension and revocation of the discount. By submitting, I give Ticketix permission to verify my Senior Citizen status.</span>
+                    </label>
+                </div>
+
+                <button type="submit" name="apply_senior_discount" class="btn btn-primary" id="seniorSubmitBtn" disabled>Submit Senior Citizen Application</button>
+            </form>
+            <script>
+            (function(){
+                var cb = document.getElementById('senior_agreement');
+                var btn = document.getElementById('seniorSubmitBtn');
+                if(cb && btn){
+                    cb.addEventListener('change', function(){ btn.disabled = !this.checked; });
+                }
+            })();
+            </script>
             <?php endif; ?>
         </div>
 
@@ -607,23 +730,6 @@ $birthdateFormatted = $user['birthdate'] ? date('Y-m-d', strtotime($user['birthd
                 e.target.value = e.target.value.replace(/\D/g, '');
             });
         }
-
-        // PWD ID image preview
-        function previewPwdImg(input) {
-            const preview = document.getElementById('pwdImgPreview');
-            const img = document.getElementById('pwdPreviewImg');
-            if (input.files && input.files[0]) {
-                const reader = new FileReader();
-                reader.onload = e => {
-                    img.src = e.target.result;
-                    preview.style.display = 'block';
-                };
-                reader.readAsDataURL(input.files[0]);
-            } else {
-                preview.style.display = 'none';
-            }
-        }
     </script>
 </body>
 </html>
-

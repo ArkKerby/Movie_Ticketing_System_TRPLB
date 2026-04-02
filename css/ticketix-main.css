@@ -615,6 +615,29 @@ body {
   /* Body text Regular */
 }
 
+/* Cinema type badges on movie hover */
+.cinema-badges {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: -10px 0 14px 0;
+}
+
+.cinema-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.7em;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
 /* Coming Soon movies - always visible info */
 #coming-soon .movie {
   position: relative;
@@ -1077,6 +1100,8 @@ section#home.hero *::after {
   height: 100%;
   background-color: rgba(0, 0, 0, 0.8);
   animation: fadeIn ease;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal-content {
@@ -1398,12 +1423,65 @@ section#home.hero *::after {
     padding: 15px;
   }
 
+  /* ── Modal responsive ── */
+  .modal-content {
+    width: 92%;
+    margin: 3% auto;
+    padding: 20px 16px;
+    max-height: 90vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .movie-detail-modal {
+    width: 95%;
+    max-width: none;
+  }
+
   .movie-detail-content {
     grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .movie-poster img {
+    max-height: 250px;
+    width: auto;
+    margin: 0 auto;
+    display: block;
+  }
+
+  .movie-details h2 {
+    font-size: 1.4em;
+  }
+
+  .movie-details p {
+    font-size: 0.95em;
+  }
+
+  .movie-description {
+    margin: 12px 0;
+    padding: 12px;
+    font-size: 0.9em;
   }
 
   .modal-actions {
     flex-direction: column;
+    gap: 10px;
+  }
+
+  .modal-actions .action-btn,
+  .modal-actions .btn {
+    width: 100%;
+    text-align: center;
+    padding: 12px 16px;
+    font-size: 1em;
+  }
+
+  .close {
+    font-size: 24px;
+    top: 10px;
+    right: 14px;
+    z-index: 10;
   }
 
   .trailer-modal {
@@ -1413,6 +1491,37 @@ section#home.hero *::after {
 
   #youtubePlayer {
     padding-bottom: 56.25%;
+  }
+
+  /* ── Touch-friendly movie overlay ── */
+  .movie-overlay {
+    opacity: 1;
+    background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.4) 50%, transparent 100%);
+    align-items: flex-end;
+  }
+
+  .movie-overlay .movie-info {
+    padding: 12px 10px;
+    width: 100%;
+  }
+
+  .movie-overlay .movie-info h3 {
+    font-size: 0.9em;
+    margin-bottom: 4px;
+  }
+
+  .movie-overlay .movie-info p {
+    font-size: 0.7em;
+    margin-bottom: 8px;
+  }
+
+  .movie-actions {
+    gap: 6px;
+  }
+
+  .movie-actions .action-btn {
+    font-size: 0.7em;
+    padding: 5px 8px;
   }
 
   /* Section-specific responsive styling */

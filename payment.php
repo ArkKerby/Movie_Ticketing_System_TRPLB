@@ -344,9 +344,11 @@ $conn->close();
     
     <script>
         let selectedSavedMethod = null;
+        let paymentInitiated = false;
 
         // Toggle add payment form
         document.getElementById('toggleAddPaymentBtn').addEventListener('click', function() {
+            if (paymentInitiated) return;
             const form = document.getElementById('addPaymentForm');
             form.classList.toggle('active');
         });
@@ -364,6 +366,7 @@ $conn->close();
         // Handle saved payment method selection
         document.querySelectorAll('.saved-method-option').forEach(function(element) {
             element.addEventListener('click', function() {
+                if (paymentInitiated) return;
                 const methodData = this.getAttribute('data-method');
                 const method = JSON.parse(methodData);
                 selectSavedPaymentMethod(method);
@@ -377,6 +380,7 @@ $conn->close();
         });
 
         function selectSavedPaymentMethod(method) {
+            if (paymentInitiated) return;
             selectedSavedMethod = method;
             document.getElementById('savedPaymentMethodId').value = method.payment_method_id;
             
@@ -425,6 +429,21 @@ $conn->close();
             if (initiateBtn) initiateBtn.style.display = 'none';
             if (paymentSummary) paymentSummary.style.display = 'none';
         }
+
+        function lockPaymentSelection() {
+            paymentInitiated = true;
+            // Visually disable all payment method options
+            document.querySelectorAll('.saved-method-option').forEach(el => {
+                el.style.opacity = '0.5';
+                el.style.pointerEvents = 'none';
+            });
+            // Hide the "Add New Payment Method" button
+            const addBtn = document.getElementById('toggleAddPaymentBtn');
+            if (addBtn) addBtn.style.display = 'none';
+            // Hide the add payment form if open
+            const addForm = document.getElementById('addPaymentForm');
+            if (addForm) addForm.classList.remove('active');
+        }
         
         // Handle initiate payment button
         const initiateBtn = document.getElementById('initiatePaymentBtn');
@@ -436,10 +455,13 @@ $conn->close();
     
     document.getElementById('referenceNumber').value = referenceNumber;
     
+    // Lock payment method selection after initiating payment
+    lockPaymentSelection();
+    
     // Hide the entire payment summary section
     const paymentSummary = document.getElementById('paymentSummary');
     if (paymentSummary) {
-        paymentSummary.style.display = 'none'; // ← Hide the whole summary
+        paymentSummary.style.display = 'none';
     }
     
     initiateBtn.style.display = 'none';

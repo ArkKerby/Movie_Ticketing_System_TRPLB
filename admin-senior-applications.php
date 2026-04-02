@@ -13,13 +13,13 @@ $messageType = '';
 
 // Handle approve/reject actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $appId  = intval($_POST['pwd_app_id'] ?? 0);
+    $appId  = intval($_POST['senior_app_id'] ?? 0);
     $action = $_POST['action'] ?? '';
     $note   = trim($_POST['admin_notes'] ?? '');
 
     if ($appId > 0 && in_array($action, ['approve', 'reject'])) {
         $newStatus = ($action === 'approve') ? 'approved' : 'rejected';
-        $pwdApproved = ($action === 'approve') ? 1 : 0;
+        $seniorApproved = ($action === 'approve') ? 1 : 0;
 
         // Get acc_id from application
         $appStmt = $conn->prepare("SELECT acc_id FROM DISCOUNT_APPLICATIONS WHERE app_id = ?");
@@ -31,6 +31,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($appRow) {
             $accId = $appRow['acc_id'];
 
+            // If approving, check if user already has PWD approved (can't have both)
+            if ($action === 'approve') {
+                $pwdCheck = $conn->prepare("SELECT pwd_approved FROM USER_ACCOUNT WHERE acc_id = ?");
+                $pwdCheck->bind_param("i", $accId);
+                $pwdCheck->execute();
+                $pwdRow = $pwdCheck->get_result()->fetch_assoc();
+                $pwdCheck->close();
+
+                if ($pwdRow && !empty($pwdRow['pwd_approved'])) {
+                    $message = "Cannot approve: User already has an active PWD discount. PWD and Senior discounts cannot be combined.";
+                    $messageType = 'error';
+                    goto skip_action;
+                }
+            }
+
             // Update application
             $updStmt = $conn->prepare("UPDATE DISCOUNT_APPLICATIONS SET status = ?, admin_notes = ?, reviewed_at = NOW() WHERE app_id = ?");
             $updStmt->bind_param("ssi", $newStatus, $note, $appId);
@@ -38,13 +53,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $updStmt->close();
 
             // Update user account
-            $uUpdStmt = $conn->prepare("UPDATE USER_ACCOUNT SET pwd_approved = ? WHERE acc_id = ?");
-            $uUpdStmt->bind_param("ii", $pwdApproved, $accId);
+            $uUpdStmt = $conn->prepare("UPDATE USER_ACCOUNT SET senior_approved = ? WHERE acc_id = ?");
+            $uUpdStmt->bind_param("ii", $seniorApproved, $accId);
             $uUpdStmt->execute();
             $uUpdStmt->close();
 
             // Mark related notifications as read
-            $nStmt = $conn->prepare("UPDATE ADMIN_NOTIFICATIONS SET is_read = 1 WHERE type = 'pwd_application' AND reference_id = ?");
+            $nStmt = $conn->prepare("UPDATE ADMIN_NOTIFICATIONS SET is_read = 1 WHERE type = 'senior_application' AND reference_id = ?");
             $nStmt->bind_param("i", $appId);
             $nStmt->execute();
             $nStmt->close();
@@ -54,15 +69,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+skip_action:
 
 // Fetch all applications
 $applications = [];
 $res = $conn->query("
-    SELECT p.*, p.app_id AS pwd_app_id, p.id_number AS pwd_id_number, p.id_image AS pwd_id_image, u.firstName, u.lastName, u.email
-    FROM DISCOUNT_APPLICATIONS p
-    JOIN USER_ACCOUNT u ON p.acc_id = u.acc_id
-    WHERE p.discount_type = 'pwd'
-    ORDER BY FIELD(p.status, 'pending', 'rejected', 'approved'), p.submitted_at DESC
+    SELECT s.*, s.app_id AS senior_app_id, s.id_number AS senior_id_number, s.id_image AS senior_id_image, u.firstName, u.lastName, u.email
+    FROM DISCOUNT_APPLICATIONS s
+    JOIN USER_ACCOUNT u ON s.acc_id = u.acc_id
+    WHERE s.discount_type = 'senior'
+    ORDER BY FIELD(s.status, 'pending', 'rejected', 'approved'), s.submitted_at DESC
 ");
 if ($res) {
     while ($row = $res->fetch_assoc()) {
@@ -83,7 +99,7 @@ $conn->close();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>PWD Applications - Admin</title>
+    <title>Senior Citizen Applications - Admin</title>
     <link rel="icon" type="image/png" href="images/brand x.png" />
     <link rel="stylesheet" href="css/admin-panel.css" />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet" />
@@ -254,13 +270,13 @@ $conn->close();
             <a href="view-bookings.php">List Bookings</a>
             <a href="view-deleted-movies.php">Deleted Movies</a>
             <a href="mall-admin/assign-movie.php">Assign Movies</a>
-            <a href="admin-pwd-applications.php" class="active">
-                PWD Applications
+            <a href="admin-pwd-applications.php">PWD Applications</a>
+            <a href="admin-senior-applications.php" class="active">
+                Senior Applications
                 <?php if ($pendingCount > 0): ?>
                     <span class="notif-badge"><?= $pendingCount ?></span>
                 <?php endif; ?>
             </a>
-            <a href="admin-senior-applications.php">Senior Applications</a>
         </nav>
         <div class="sidebar-footer">
             <a href="logout.php" class="logout-btn" id="logoutBtn" style="display:none;">Logout</a>
@@ -269,7 +285,7 @@ $conn->close();
 
     <main class="main-content">
         <header>
-            <h1>PWD <span class="highlight">Applications</span></h1>
+            <h1>Senior Citizen <span class="highlight">Applications</span></h1>
         </header>
 
         <?php if ($message): ?>
@@ -279,11 +295,11 @@ $conn->close();
         <?php endif; ?>
 
         <div class="pwd-admin-header">
-            <p>Review and manage PWD discount applications submitted by users. Approved users will receive a 20% seat discount at checkout.</p>
+            <p>Review and manage Senior Citizen discount applications submitted by users. Approved users will receive a 20% seat discount at checkout. PWD and Senior discounts cannot be combined.</p>
         </div>
 
         <?php if (empty($applications)): ?>
-            <div class="empty-state">No PWD applications yet.</div>
+            <div class="empty-state">No Senior Citizen applications yet.</div>
         <?php else: ?>
         <div class="pwd-table-wrap">
             <table class="pwd-table">
@@ -292,7 +308,7 @@ $conn->close();
                         <th>#</th>
                         <th>User</th>
                         <th>Email</th>
-                        <th>PWD ID Number</th>
+                        <th>Senior Citizen ID</th>
                         <th>ID Image</th>
                         <th>Status</th>
                         <th>Submitted</th>
@@ -303,12 +319,12 @@ $conn->close();
                 <tbody>
                     <?php foreach ($applications as $app): ?>
                     <tr>
-                        <td><?= $app['pwd_app_id'] ?></td>
+                        <td><?= $app['senior_app_id'] ?></td>
                         <td><strong><?= htmlspecialchars(trim($app['firstName'] . ' ' . $app['lastName'])) ?></strong></td>
                         <td><?= htmlspecialchars($app['email']) ?></td>
-                        <td><?= htmlspecialchars($app['pwd_id_number']) ?></td>
+                        <td><?= htmlspecialchars($app['senior_id_number']) ?></td>
                         <td>
-                            <a href="#" class="view-img-link" onclick="openImgModal('<?= htmlspecialchars($app['pwd_id_image']) ?>', '<?= htmlspecialchars($app['pwd_id_number']) ?>'); return false;">
+                            <a href="#" class="view-img-link" onclick="openImgModal('<?= htmlspecialchars($app['senior_id_image']) ?>', '<?= htmlspecialchars($app['senior_id_number']) ?>'); return false;">
                                 View Image
                             </a>
                         </td>
@@ -318,20 +334,20 @@ $conn->close();
                         <td>
                             <?php if ($app['status'] === 'pending'): ?>
                             <form method="POST" class="action-form" onsubmit="return confirm('Are you sure?');">
-                                <input type="hidden" name="pwd_app_id" value="<?= $app['pwd_app_id'] ?>">
+                                <input type="hidden" name="senior_app_id" value="<?= $app['senior_app_id'] ?>">
                                 <input type="text" name="admin_notes" class="note-input" placeholder="Optional note...">
                                 <button type="submit" name="action" value="approve" class="btn-approve">Approve</button>
                                 <button type="submit" name="action" value="reject" class="btn-reject">Reject</button>
                             </form>
                             <?php elseif ($app['status'] === 'approved'): ?>
                             <form method="POST" class="action-form" onsubmit="return confirm('Revoke approval?');">
-                                <input type="hidden" name="pwd_app_id" value="<?= $app['pwd_app_id'] ?>">
+                                <input type="hidden" name="senior_app_id" value="<?= $app['senior_app_id'] ?>">
                                 <input type="text" name="admin_notes" class="note-input" placeholder="Reason...">
                                 <button type="submit" name="action" value="reject" class="btn-reject">Revoke</button>
                             </form>
                             <?php elseif ($app['status'] === 'rejected'): ?>
                             <form method="POST" class="action-form" onsubmit="return confirm('Re-approve?');">
-                                <input type="hidden" name="pwd_app_id" value="<?= $app['pwd_app_id'] ?>">
+                                <input type="hidden" name="senior_app_id" value="<?= $app['senior_app_id'] ?>">
                                 <button type="submit" name="action" value="approve" class="btn-approve">Re-approve</button>
                             </form>
                             <?php endif; ?>
@@ -349,7 +365,7 @@ $conn->close();
         <div class="img-modal-box">
             <button class="img-modal-close" onclick="closeImgModal()">×</button>
             <p class="img-modal-title" id="imgModalTitle"></p>
-            <img id="imgModalImg" src="" alt="PWD ID">
+            <img id="imgModalImg" src="" alt="Senior Citizen ID">
         </div>
     </div>
 
@@ -359,9 +375,9 @@ $conn->close();
         btn.style.display = (btn.style.display === 'none' || btn.style.display === '') ? 'block' : 'none';
     }
 
-    function openImgModal(src, pwdId) {
+    function openImgModal(src, seniorId) {
         document.getElementById('imgModalImg').src = src;
-        document.getElementById('imgModalTitle').textContent = 'PWD ID: ' + pwdId;
+        document.getElementById('imgModalTitle').textContent = 'Senior Citizen ID: ' + seniorId;
         document.getElementById('imgModal').classList.add('active');
     }
 

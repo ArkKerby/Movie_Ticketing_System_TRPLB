@@ -1,6 +1,6 @@
 <?php
 session_start();
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'mall_admin') {
     header("Location: login.php");
     exit();
 }
@@ -109,7 +109,7 @@ if ($deletedMoviesQuery) {
     <aside class="sidebar">
         <div class="profile-section">
             <img src="images/brand x.png" alt="Profile Picture" class="profile-pic clickable-logo" onclick="toggleLogout()" style="cursor: pointer;" />
-            <h2>Admin</h2>
+            <h2>Mall Admin</h2>
         </div>
         <nav class="sidebar-nav">
             <a href="admin-panel.php">Dashboard</a>
@@ -117,6 +117,7 @@ if ($deletedMoviesQuery) {
             <a href="view-shows.php">List Shows</a>
             <a href="view-bookings.php">List Bookings</a>
             <a href="view-deleted-movies.php" class="active">Deleted Movies</a>
+            <a href="mall-admin/assign-movie.php">Assign Movies</a>
         </nav>
         <div class="sidebar-footer">
             <a href="logout.php" class="logout-btn" id="logoutBtn" style="display: none;">➜ Logout</a>
@@ -129,7 +130,7 @@ if ($deletedMoviesQuery) {
         </header>
 
         <div class="warning-box">
-            <strong>⚠️ Note:</strong> These movies are hidden from public view but all booking history and revenue data is preserved. 
+            <strong>Note:</strong> These movies are hidden from public view but all booking history and revenue data is preserved. 
             You can restore them or permanently delete them (which will remove all associated data).
         </div>
 
@@ -141,22 +142,22 @@ if ($deletedMoviesQuery) {
                         <h3><?= htmlspecialchars($movie['title']) ?></h3>
                         <p><?= htmlspecialchars($movie['genre']) ?> • <?= htmlspecialchars($movie['rating'] ?: 'N/A') ?></p>
                         <div class="deleted-movie-stats">
-                            <span>📅 Deleted: <?= date('M d, Y', strtotime($movie['deleted_at'])) ?></span>
-                            <span>🎬 Schedules: <?= $movie['schedule_count'] ?></span>
-                            <span>🎟️ Bookings: <?= $movie['booking_count'] ?></span>
+                            <span>Deleted: <?= date('M d, Y', strtotime($movie['deleted_at'])) ?></span>
+                            <span>Schedules: <?= $movie['schedule_count'] ?></span>
+                            <span>Bookings: <?= $movie['booking_count'] ?></span>
                         </div>
                     </div>
                     <div>
                         <button class="restore-btn" data-id="<?= $movie['movie_show_id'] ?>">
-                            ↩️ Restore
+                            Restore
                         </button>
                         <?php if ($movie['booking_count'] == 0): ?>
                             <button class="permanent-delete-btn" data-id="<?= $movie['movie_show_id'] ?>">
-                                🗑️ Delete Permanently
+                                Delete Permanently
                             </button>
                         <?php else: ?>
                             <button class="permanent-delete-btn" disabled title="Cannot permanently delete movies with bookings" style="opacity: 0.5; cursor: not-allowed;">
-                                🗑️ Delete Permanently
+                                Delete Permanently
                             </button>
                         <?php endif; ?>
                     </div>
@@ -205,7 +206,7 @@ if ($deletedMoviesQuery) {
         button.addEventListener('click', function() {
             const movieId = this.getAttribute('data-id');
 
-            if (!confirm('⚠️ WARNING: This will PERMANENTLY delete the movie and ALL associated data (schedules, seats, etc.). This action CANNOT be undone!\n\nAre you absolutely sure?')) return;
+            if (!confirm('WARNING: This will PERMANENTLY delete the movie and ALL associated data (schedules, seats, etc.). This action CANNOT be undone!\n\nAre you absolutely sure?')) return;
 
             fetch('permanent-delete-movie.php', {
                 method: 'POST',

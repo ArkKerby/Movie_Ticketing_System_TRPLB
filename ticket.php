@@ -21,19 +21,19 @@ if (!$ticketId || !$userId) {
 $bookingStatusCheck = $conn->query("SHOW COLUMNS FROM RESERVE LIKE 'booking_status'");
 $has_booking_status = $bookingStatusCheck && $bookingStatusCheck->num_rows > 0;
 
-// Check if payment_status column exists
-$paymentStatusCheck = $conn->query("SHOW COLUMNS FROM PAYMENT LIKE 'payment_status'");
+// Check if payment_status column exists in TICKET
+$paymentStatusCheck = $conn->query("SHOW COLUMNS FROM TICKET LIKE 'payment_status'");
 $has_payment_status = $paymentStatusCheck && $paymentStatusCheck->num_rows > 0;
 
 // Get ticket details
 $ticketQuery = "
-    SELECT t.*, r.*, m.title, m.image_poster, ms.show_date, ms.show_hour, 
-           p.payment_type, p.amount_paid, p.reference_number, r.booking_type
+    SELECT t.*, r.*, m.title, m.image_poster, ms.show_date, ms.show_hour,
+           t.payment_type, t.amount_paid, t.reference_number
 ";
 
 // Add payment_status if column exists
 if ($has_payment_status) {
-    $ticketQuery .= ", p.payment_status";
+    $ticketQuery .= ", t.payment_status";
 }
 
 // Check if MOVIE_SCHEDULE has branch_id
@@ -47,7 +47,6 @@ if ($msHasBranch) {
         JOIN MOVIE_SCHEDULE ms ON r.schedule_id = ms.schedule_id
         JOIN MOVIE m ON ms.movie_show_id = m.movie_show_id
         LEFT JOIN BRANCH b ON ms.branch_id = b.branch_id
-        JOIN PAYMENT p ON t.payment_id = p.payment_id
         WHERE t.ticket_id = ? AND r.acc_id = ?";
 } else {
     $ticketQuery .= "
@@ -55,7 +54,6 @@ if ($msHasBranch) {
         JOIN RESERVE r ON t.reserve_id = r.reservation_id
         JOIN MOVIE_SCHEDULE ms ON r.schedule_id = ms.schedule_id
         JOIN MOVIE m ON ms.movie_show_id = m.movie_show_id
-        JOIN PAYMENT p ON t.payment_id = p.payment_id
         WHERE t.ticket_id = ? AND r.acc_id = ?";
 }
 
@@ -74,9 +72,8 @@ if (!$ticket) {
 
 // Get seats
 $stmt = $conn->prepare("
-    SELECT s.seat_number, s.seat_type
+    SELECT rs.seat_number, 'Regular' AS seat_type
     FROM RESERVE_SEAT rs
-    JOIN SEAT s ON rs.seat_id = s.seat_id
     WHERE rs.reservation_id = ?
 ");
 $stmt->bind_param("i", $ticket['reserve_id']);
@@ -192,10 +189,6 @@ $bookingStatusClass = 'status-' . str_replace([' ', '_'], '-', $bookingApprovalS
         
         <div class="ticket-header">
             <h1>Ticketix</h1>
-            <?php
-                $clientTypeLabel = (isset($ticket['booking_type']) && $ticket['booking_type'] === 'walk-in') ? 'Walk-in' : 'Client';
-            ?>
-            <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:4px;font-weight:600;letter-spacing:1px;text-transform:uppercase;"><?= $clientTypeLabel ?></div>
             <div class="ticket-number">Ticket #<?= htmlspecialchars($ticket['ticket_number']) ?></div>
         </div>
         
@@ -207,6 +200,12 @@ $bookingStatusClass = 'status-' . str_replace([' ', '_'], '-', $bookingApprovalS
                          onerror="this.src='images/default-poster.jpg'">
                 </div>
                 <h2>Movie Details</h2>
+                <div class="detail-item">
+                    <span class="detail-label">Booking Type:</span>
+                    <span class="detail-value">
+                        <span style="background:rgba(85,138,206,0.15);color:#558ace;border:1px solid rgba(85,138,206,0.35);border-radius:6px;padding:2px 10px;font-size:12px;font-weight:700;letter-spacing:.04em;">Client (Online)</span>
+                    </span>
+                </div>
                 <div class="detail-item">
                     <span class="detail-label">Movie:</span>
                     <span class="detail-value"><?= htmlspecialchars($ticket['title']) ?></span>

@@ -33,7 +33,7 @@ $query = "
            $bookingStatusSelect,
            m.title, m.image_poster,
            ms.show_date, ms.show_hour,
-           p.payment_type, p.amount_paid, p.payment_status, p.reference_number
+           t.payment_type, t.amount_paid, t.payment_status, t.reference_number
 ";
 
 $msBranchCheck = $conn->query("SHOW COLUMNS FROM MOVIE_SCHEDULE LIKE 'branch_id'");
@@ -47,7 +47,6 @@ if ($msHasBranch) {
         JOIN MOVIE_SCHEDULE ms ON r.schedule_id = ms.schedule_id
         JOIN MOVIE m ON ms.movie_show_id = m.movie_show_id
         LEFT JOIN BRANCH b ON ms.branch_id = b.branch_id
-        JOIN PAYMENT p ON t.payment_id = p.payment_id
         WHERE r.acc_id = ?
         ORDER BY t.date_issued DESC
     ";
@@ -57,7 +56,6 @@ if ($msHasBranch) {
         JOIN RESERVE r ON t.reserve_id = r.reservation_id
         JOIN MOVIE_SCHEDULE ms ON r.schedule_id = ms.schedule_id
         JOIN MOVIE m ON ms.movie_show_id = m.movie_show_id
-        JOIN PAYMENT p ON t.payment_id = p.payment_id
         WHERE r.acc_id = ?
         ORDER BY t.date_issued DESC
     ";
@@ -70,11 +68,10 @@ $bookings = [];
 while ($row = $result->fetch_assoc()) {
     // Get seats for this reservation
     $seatStmt = $conn->prepare("
-        SELECT s.seat_number
+        SELECT rs.seat_number
         FROM RESERVE_SEAT rs
-        JOIN SEAT s ON rs.seat_id = s.seat_id
         WHERE rs.reservation_id = ?
-        ORDER BY s.seat_number
+        ORDER BY rs.seat_number
     ");
     $seatStmt->bind_param("i", $row['reservation_id']);
     $seatStmt->execute();
@@ -148,12 +145,12 @@ $conn->close();
                         $displayStatus = strtolower($booking['ticket_status'] ?? 'pending');
                     }
 
-                    // Check if booking has expired (5 minutes after showtime)
+                    // Check if booking has expired (showtime has passed)
                     // Only override if not already cancelled or refunded
                     if (!in_array($displayStatus, ['cancelled', 'refunded'])) {
-                        $showDateTime = new DateTime($booking['show_date'] . ' ' . $booking['show_hour']);
-                        $showDateTime->modify('+5 minutes');
-                        $now = new DateTime();
+                        $tz = new DateTimeZone('Asia/Manila');
+                        $showDateTime = new DateTime($booking['show_date'] . ' ' . $booking['show_hour'], $tz);
+                        $now = new DateTime('now', $tz);
                         if ($now > $showDateTime) {
                             $displayStatus = 'expired';
                         }
@@ -330,5 +327,3 @@ $conn->close();
     </script>
 </body>
 </html>
-
-

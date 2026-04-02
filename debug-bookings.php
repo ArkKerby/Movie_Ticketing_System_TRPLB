@@ -5,7 +5,7 @@ require_once __DIR__ . '/config.php';
 $conn = getDBConnection();
 
 // Check if user is admin
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'mall_admin') {
     die("Access denied. Admin only.");
 }
 
@@ -36,7 +36,7 @@ if ($reserveQuery) {
 
 // Check PAYMENT table
 echo "<h2>PAYMENT Table</h2>";
-$paymentQuery = $conn->query("SELECT * FROM PAYMENT ORDER BY payment_id DESC LIMIT 10");
+$paymentQuery = $conn->query("SELECT * FROM TICKET ORDER BY ticket_id DESC LIMIT 10");
 if ($paymentQuery) {
     echo "<p>Total Payments: " . $paymentQuery->num_rows . "</p>";
     echo "<table border='1' cellpadding='5'>";
@@ -54,7 +54,7 @@ if ($paymentQuery) {
     echo "</table>";
     
     // Calculate total revenue
-    $revenueQuery = $conn->query("SELECT IFNULL(SUM(amount_paid), 0) AS total FROM PAYMENT WHERE payment_status = 'paid'");
+    $revenueQuery = $conn->query("SELECT IFNULL(SUM(amount_paid), 0) AS total FROM TICKET WHERE payment_status = 'paid'");
     $revenue = $revenueQuery->fetch_assoc()['total'] ?? 0;
     echo "<p><strong>Total Revenue (paid only): ₱" . number_format($revenue, 2) . "</strong></p>";
 } else {
@@ -70,8 +70,8 @@ echo "<p>Total Tickets: " . $ticketCount . "</p>";
 // Summary
 echo "<h2>Summary</h2>";
 $totalReservations = $conn->query("SELECT COUNT(*) AS total FROM RESERVE")->fetch_assoc()['total'] ?? 0;
-$totalPayments = $conn->query("SELECT COUNT(*) AS total FROM PAYMENT WHERE payment_status = 'paid'")->fetch_assoc()['total'] ?? 0;
-$totalRevenue = $conn->query("SELECT IFNULL(SUM(amount_paid), 0) AS total FROM PAYMENT WHERE payment_status = 'paid'")->fetch_assoc()['total'] ?? 0;
+$totalPayments = $conn->query("SELECT COUNT(*) AS total FROM TICKET WHERE payment_status = 'paid'")->fetch_assoc()['total'] ?? 0;
+$totalRevenue = $conn->query("SELECT IFNULL(SUM(amount_paid), 0) AS total FROM TICKET WHERE payment_status = 'paid'")->fetch_assoc()['total'] ?? 0;
 
 echo "<p><strong>Total Reservations:</strong> " . $totalReservations . "</p>";
 echo "<p><strong>Total Paid Payments:</strong> " . $totalPayments . "</p>";
@@ -79,4 +79,3 @@ echo "<p><strong>Total Revenue:</strong> ₱" . number_format($totalRevenue, 2) 
 
 echo "<br><a href='admin-panel.php'>Back to Admin Panel</a>";
 ?>
-

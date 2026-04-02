@@ -1,6 +1,6 @@
 <?php
 session_start();
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'mall_admin') {
     header("Location: login.php");
     exit();
 }
@@ -501,13 +501,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <aside class="sidebar">
         <div class="profile-section">
             <img src="images/brand x.png" alt="Profile Picture" class="profile-pic" />
-            <h2>Admin</h2>
+            <h2>Mall Admin</h2>
         </div>
         <nav class="sidebar-nav">
             <a href="admin-panel.php">Dashboard</a>
             <a href="add-show.php" class="active">Add Shows</a>
             <a href="view-shows.php">List Shows</a>
             <a href="view-bookings.php">List Bookings</a>
+            <a href="view-deleted-movies.php">Deleted Movies</a>
+            <a href="mall-admin/assign-movie.php">Assign Movies</a>
         </nav>
     </aside>
     <main class="main-content">
@@ -589,7 +591,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <!-- Live preview -->
                 <div id="trailer-preview-wrap" style="display:none; margin-bottom:20px;">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                        <span style="font-size:13px;font-weight:600;color:#333;">▶ Trailer Preview</span>
+                        <span style="font-size:13px;font-weight:600;color:#333;">Trailer Preview</span>
                         <span id="trailer-id-badge" style="font-size:11px;background:#00BFFF22;color:#00BFFF;border:1px solid #00BFFF44;border-radius:6px;padding:2px 8px;"></span>
                     </div>
                     <div style="position:relative;padding-bottom:56.25%;height:0;border-radius:10px;overflow:hidden;border:2px solid rgba(0,191,255,0.3);">
@@ -626,38 +628,30 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 </script>
                 <!-- ── END TRAILER FIELD ──────────────────────────── -->
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" id="now_showing" name="now_showing" value="1" style="width: auto; cursor: pointer;" onchange="handleNowShowingChange()">
-                            <span>Mark as Now Showing</span>
+                <div class="form-row" style="margin-bottom: 20px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="now_showing" name="now_showing" value="1" checked
+                                   style="width: auto; accent-color: #00BFFF; transform: scale(1.3);"
+                                   onchange="if(this.checked) document.getElementById('coming_soon').checked = false;">
+                            <span>Now Showing</span>
                         </label>
+                        <small style="color: #666; font-size: 12px; margin-top: 4px;">Movie will appear in the "Now Showing" section</small>
                     </div>
-                    <div class="form-group">
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" id="coming_soon" name="coming_soon" value="1" style="width: auto; cursor: pointer;" onchange="handleComingSoonChange()">
-                            <span>Mark as Coming Soon</span>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="coming_soon" name="coming_soon" value="1"
+                                   style="width: auto; accent-color: #e67e22; transform: scale(1.3);"
+                                   onchange="if(this.checked) document.getElementById('now_showing').checked = false;">
+                            <span>Coming Soon</span>
                         </label>
+                        <small style="color: #666; font-size: 12px; margin-top: 4px;">Movie will appear in the "Coming Soon" section</small>
                     </div>
                 </div>
-                
-                <script>
-                    function handleNowShowingChange() {
-                        const nowShowing = document.getElementById('now_showing');
-                        const comingSoon = document.getElementById('coming_soon');
-                        if (nowShowing.checked) {
-                            comingSoon.checked = false;
-                        }
-                    }
-                    
-                    function handleComingSoonChange() {
-                        const nowShowing = document.getElementById('now_showing');
-                        const comingSoon = document.getElementById('coming_soon');
-                        if (comingSoon.checked) {
-                            nowShowing.checked = false;
-                        }
-                    }
-                </script>
+
+                <div style="margin-bottom: 20px; padding: 14px 18px; background: rgba(0,180,216,0.1); border: 1px solid rgba(0,180,216,0.3); border-radius: 8px; color: #b0cfe0; font-size: 13px; line-height: 1.5;">
+                    <strong style="color: #00b4d8;">Note:</strong> Movies added here will only be visible to customers after you assign them to a Cinema Type (e.g., IMAX, Director's Club, Regular) via <strong>Assign Movies</strong>.
+                </div>
 
                 <div class="add-schedule-section">
                     <h3>Auto-Generate Show Schedules</h3>

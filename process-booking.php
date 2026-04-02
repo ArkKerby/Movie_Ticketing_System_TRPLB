@@ -264,20 +264,19 @@ try {
     $bookingStatusCheck = $conn->query("SHOW COLUMNS FROM RESERVE LIKE 'booking_status'");
     $hasBookingStatus = $bookingStatusCheck && $bookingStatusCheck->num_rows > 0;
     
-    $bookingTypeOnline = 'online';
     if ($hasBookingStatus) {
-        // Auto-approve: set booking_status to 'approved' immediately
-        $stmt = $conn->prepare("INSERT INTO RESERVE (acc_id, schedule_id, reserve_date, ticket_amount, sum_price, food_total, booking_status, booking_type) VALUES (?, ?, NOW(), ?, ?, ?, 'approved', ?)");
+        // Set booking_status to 'pending' — admin must approve
+        $stmt = $conn->prepare("INSERT INTO RESERVE (acc_id, schedule_id, reserve_date, ticket_amount, sum_price, food_total, booking_status) VALUES (?, ?, NOW(), ?, ?, ?, 'pending')");
         if (!$stmt) {
             throw new Exception("Failed to prepare reservation statement: " . $conn->error);
         }
-        $stmt->bind_param("iiidds", $userId, $scheduleId, $seatCount, $seatTotal, $foodTotal, $bookingTypeOnline);
+        $stmt->bind_param("iiidd", $userId, $scheduleId, $seatCount, $seatTotal, $foodTotal);
     } else {
-        $stmt = $conn->prepare("INSERT INTO RESERVE (acc_id, schedule_id, reserve_date, ticket_amount, sum_price, food_total, booking_type) VALUES (?, ?, NOW(), ?, ?, ?, ?)");
+        $stmt = $conn->prepare("INSERT INTO RESERVE (acc_id, schedule_id, reserve_date, ticket_amount, sum_price, food_total) VALUES (?, ?, NOW(), ?, ?, ?)");
         if (!$stmt) {
             throw new Exception("Failed to prepare reservation statement: " . $conn->error);
         }
-        $stmt->bind_param("iiidds", $userId, $scheduleId, $seatCount, $seatTotal, $foodTotal, $bookingTypeOnline);
+        $stmt->bind_param("iiidd", $userId, $scheduleId, $seatCount, $seatTotal, $foodTotal);
     }
     if (!$stmt->execute()) {
         throw new Exception("Failed to execute reservation: " . $stmt->error);
@@ -289,62 +288,25 @@ try {
     $stmt->close();
     
     // Create or get seats and link to reservation
-    $seatPrice = 250.00; // Regular seat price
     foreach ($selectedSeats as $seatNumber) {
-        // Check if seat exists
-        $stmt = $conn->prepare("SELECT seat_id FROM SEAT WHERE seat_number = ? LIMIT 1");
-        $stmt->bind_param("s", $seatNumber);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $seat = $result->fetch_assoc();
-        $seatId = $seat['seat_id'] ?? null;
-        $stmt->close();
-        
-        // Create seat if it doesn't exist
-        if (!$seatId) {
-            $stmt = $conn->prepare("INSERT INTO SEAT (seat_number, seat_type, seat_price) VALUES (?, 'Regular', ?)");
-            $stmt->bind_param("sd", $seatNumber, $seatPrice);
-            $stmt->execute();
-            $seatId = $conn->insert_id;
-            $stmt->close();
-        }
-        
-        // Link seat to reservation
-        $stmt = $conn->prepare("INSERT INTO RESERVE_SEAT (reservation_id, seat_id) VALUES (?, ?)");
-        $stmt->bind_param("ii", $reservationId, $seatId);
+        // Insert directly into RESERVE_SEAT with seat_number
+        $stmt = $conn->prepare("INSERT INTO RESERVE_SEAT (reservation_id, seat_number) VALUES (?, ?)");
+        $stmt->bind_param("is", $reservationId, $seatNumber);
         $stmt->execute();
         $stmt->close();
     }
     
-    // Create payment - ensure amount_paid equals grandTotal (seat + food)
-    // This is what will be used for revenue calculation
-    $amountPaid = $grandTotal; // This should be seatTotal + foodTotal
-    $stmt = $conn->prepare("INSERT INTO PAYMENT (reserve_id, payment_type, amount_paid, payment_status, payment_date, reference_number) VALUES (?, ?, ?, 'paid', NOW(), ?)");
-    if (!$stmt) {
-        throw new Exception("Failed to prepare payment statement: " . $conn->error);
-    }
-    $stmt->bind_param("isds", $reservationId, $dbPaymentType, $amountPaid, $referenceNumber);
-    if (!$stmt->execute()) {
-        throw new Exception("Failed to execute payment: " . $stmt->error);
-    }
-    $paymentId = $conn->insert_id;
-    if (!$paymentId) {
-        throw new Exception("Failed to get payment ID. MySQL Error: " . $conn->error);
-    }
-    $stmt->close();
-    
-    // Generate ticket number
+    // Create ticket with payment info (merged)
+    $amountPaid = $grandTotal;
     $ticketNumber = 'TIX-' . strtoupper(substr(uniqid(), -8)) . '-' . date('Ymd');
     $eTicketCode = bin2hex(random_bytes(16));
+    $ticketStatus = 'pending';
     
-    // Auto-approve: always create ticket with 'valid' status immediately
-    $ticketStatus = 'valid';
-    
-    $stmt = $conn->prepare("INSERT INTO TICKET (reserve_id, payment_id, ticket_number, date_issued, ticket_status, e_ticket_code) VALUES (?, ?, ?, NOW(), ?, ?)");
+    $stmt = $conn->prepare("INSERT INTO TICKET (reserve_id, ticket_number, date_issued, ticket_status, e_ticket_code, payment_type, amount_paid, payment_status, payment_date, reference_number) VALUES (?, ?, NOW(), ?, ?, ?, ?, 'paid', NOW(), ?)");
     if (!$stmt) {
         throw new Exception("Failed to prepare ticket statement: " . $conn->error);
     }
-    $stmt->bind_param("iisss", $reservationId, $paymentId, $ticketNumber, $ticketStatus, $eTicketCode);
+    $stmt->bind_param("issssds", $reservationId, $ticketNumber, $ticketStatus, $eTicketCode, $dbPaymentType, $amountPaid, $referenceNumber);
     if (!$stmt->execute()) {
         throw new Exception("Failed to execute ticket: " . $stmt->error);
     }
@@ -399,14 +361,10 @@ try {
     
     // Verify the data was actually saved
     $verifyReserve = $conn->query("SELECT COUNT(*) as count FROM RESERVE WHERE reservation_id = " . $reservationId);
-    $verifyPayment = $conn->query("SELECT COUNT(*) as count FROM PAYMENT WHERE payment_id = " . $paymentId);
     $verifyTicket = $conn->query("SELECT COUNT(*) as count FROM TICKET WHERE ticket_id = " . $ticketId);
     
     if ($verifyReserve && $verifyReserve->fetch_assoc()['count'] == 0) {
         throw new Exception("Reservation was not saved!");
-    }
-    if ($verifyPayment && $verifyPayment->fetch_assoc()['count'] == 0) {
-        throw new Exception("Payment was not saved!");
     }
     if ($verifyTicket && $verifyTicket->fetch_assoc()['count'] == 0) {
         throw new Exception("Ticket was not saved!");
