@@ -11,8 +11,9 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-install gd curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Enable Apache mod_rewrite
-RUN a2enmod rewrite
+# Fix MPM conflict: disable event/worker, enable prefork (required for PHP)
+RUN a2dismod mpm_event mpm_worker 2>/dev/null || true \
+    && a2enmod mpm_prefork rewrite
 
 # Copy all project files to Apache web root
 COPY . /var/www/html/
