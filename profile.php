@@ -46,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_pwd_discount'])
             } else {
                 // Save file
                 $uploadDir = __DIR__ . '/uploads/pwd_ids/';
+                if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
                 $fileName  = 'pwd_' . $userId . '_' . time() . '.' . $fileExt;
                 $filePath  = $uploadDir . $fileName;
                 if (move_uploaded_file($file['tmp_name'], $filePath)) {
@@ -64,10 +65,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_pwd_discount'])
                         $uStmt->close();
                         $userName = trim(($uRow['firstName'] ?? '') . ' ' . ($uRow['lastName'] ?? ''));
                         $notifMsg = "User $userName has submitted a PWD discount application. PWD ID: $pwdIdNumber";
-                        $nStmt = $conn->prepare("INSERT INTO ADMIN_NOTIFICATIONS (type, message, reference_id) VALUES ('pwd_application', ?, ?)");
-                        $nStmt->bind_param("si", $notifMsg, $newAppId);
-                        $nStmt->execute();
-                        $nStmt->close();
+                        $tblCheck = $conn->query("SHOW TABLES LIKE 'ADMIN_NOTIFICATION'");
+                        if ($tblCheck && $tblCheck->num_rows > 0) {
+                            $nStmt = $conn->prepare("INSERT INTO ADMIN_NOTIFICATION (type, message, reference_id) VALUES ('pwd_application', ?, ?)");
+                            $nStmt->bind_param("si", $notifMsg, $newAppId);
+                            $nStmt->execute();
+                            $nStmt->close();
+                        }
                         $message = 'Your PWD discount application has been submitted and is under review.';
                         $messageType = 'success';
                     } else {
@@ -151,10 +155,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_senior_discount
                             $uStmt->close();
                             $userName = trim(($uRow['firstName'] ?? '') . ' ' . ($uRow['lastName'] ?? ''));
                             $notifMsg = "User $userName has submitted a Senior Citizen discount application. Senior ID: $seniorIdNumber";
-                            $nStmt = $conn->prepare("INSERT INTO ADMIN_NOTIFICATIONS (type, message, reference_id) VALUES ('senior_application', ?, ?)");
-                            $nStmt->bind_param("si", $notifMsg, $newAppId);
-                            $nStmt->execute();
-                            $nStmt->close();
+                            $tblCheck2 = $conn->query("SHOW TABLES LIKE 'ADMIN_NOTIFICATION'");
+                            if ($tblCheck2 && $tblCheck2->num_rows > 0) {
+                                $nStmt = $conn->prepare("INSERT INTO ADMIN_NOTIFICATION (type, message, reference_id) VALUES ('senior_application', ?, ?)");
+                                $nStmt->bind_param("si", $notifMsg, $newAppId);
+                                $nStmt->execute();
+                                $nStmt->close();
+                            }
                             $message = 'Your Senior Citizen discount application has been submitted and is under review.';
                             $messageType = 'success';
                         } else {

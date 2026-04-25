@@ -20,7 +20,7 @@ if ($token === '') {
 $conn = getDBConnection();
 
 // Find token record that is not used and not expired
-$stmt = $conn->prepare("SELECT id, acc_id, expires_at, used_at FROM email_verifications WHERE token = ? LIMIT 1");
+$stmt = $conn->prepare("SELECT id, acc_id, expires_at, used_at FROM EMAIL_VERIFICATION WHERE token = ? LIMIT 1");
 if (!$stmt) {
     respond('Server error. Please try again later.');
 }
@@ -44,7 +44,7 @@ if (strtotime($row['expires_at']) < time()) {
 
 // Mark as used
 $now = date('Y-m-d H:i:s');
-$upd = $conn->prepare('UPDATE email_verifications SET used_at = ? WHERE id = ?');
+$upd = $conn->prepare('UPDATE EMAIL_VERIFICATION SET used_at = ? WHERE id = ?');
 if ($upd) {
     $upd->bind_param('si', $now, $row['id']);
     $upd->execute();

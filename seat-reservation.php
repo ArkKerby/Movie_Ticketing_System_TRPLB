@@ -5,10 +5,40 @@ require_once __DIR__ . '/config.php';
 $conn = getDBConnection();
 
 $timings = ["10:30 AM", "12:30 PM", "3:00 PM", "05:30 PM", "06:30 PM", "08:30 PM", "9:30 PM", "10:30 PM"];
-$selectedTime = $_GET['time'] ?? '10:30 AM'; // get selected time or default
-$todayDate = (new DateTime('now', new DateTimeZone('Asia/Manila')))->format('Y-m-d');
-$maxSelectableDate = (new DateTime($todayDate, new DateTimeZone('Asia/Manila')))->modify('+30 days')->format('Y-m-d');
+
+// Determine which timings are closed (past or within 20 min) for today
+$now = new DateTime('now', new DateTimeZone('Asia/Manila'));
+$todayDate = $now->format('Y-m-d');
+$closedTimings = [];
+
+// Pre-compute closed timings for today
+foreach ($timings as $t) {
+    $tp = date_parse($t);
+    $showDT = new DateTime($todayDate . ' ' . sprintf("%02d:%02d:00", $tp['hour'], $tp['minute']), new DateTimeZone('Asia/Manila'));
+    $diff = $showDT->getTimestamp() - $now->getTimestamp();
+    if ($diff <= 1200) { // within 20 minutes or past
+        $closedTimings[] = $t;
+    }
+}
+
+// If no time specified in URL, pick the first available timing for today
 $selectedDate = $_GET['date'] ?? $todayDate;
+if (isset($_GET['time'])) {
+    $selectedTime = $_GET['time'];
+} else {
+    // Default to first available (non-closed) timing
+    $selectedTime = '10:30 AM';
+    if ($selectedDate === $todayDate) {
+        foreach ($timings as $t) {
+            if (!in_array($t, $closedTimings)) {
+                $selectedTime = $t;
+                break;
+            }
+        }
+    }
+}
+// todayDate already set above
+$maxSelectableDate = (new DateTime($todayDate, new DateTimeZone('Asia/Manila')))->modify('+30 days')->format('Y-m-d');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate)) {
     $selectedDate = $todayDate;
 }
@@ -343,7 +373,10 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in']) {
                 <?php
                 foreach ($timings as $time) {
                     $activeClass = ($time === $selectedTime) ? "active" : "";
-                    echo "<li tabindex='0' role='button' class='$activeClass' data-time='$time'><span class='icon'></span> $time</li>";
+                    $isClosed = ($selectedDate === $todayDate && in_array($time, $closedTimings));
+                    $closedClass = $isClosed ? "timing-closed" : "";
+                    $closedAttr = $isClosed ? "aria-disabled='true' title='Booking closed — showtime has passed'" : "";
+                    echo "<li tabindex='0' role='button' class='$activeClass $closedClass' data-time='$time' $closedAttr><span class='icon'></span> $time</li>";
                 }
                 ?>
             </ul>
@@ -766,6 +799,68 @@ if (isset($_SESSION['logged_in']) && $_SESSION['logged_in']) {
         });
 
         // Auto-forward to checkout if returned here after login
+
+        // --- Real-time seat availability polling ---
+        (function() {
+            const POLL_INTERVAL = 5000; // 5 seconds
+            const pollParams = {
+                movie_id: '<?= $movie ? $movie["movie_show_id"] : 0 ?>',
+                branch_id: '<?= $branchId ?? 0 ?>',
+                date: selectedDate,
+                time: '<?= isset($timeFormatted) ? $timeFormatted : "" ?>'
+            };
+
+            // Only poll if we have valid movie/time data
+            if (!pollParams.movie_id || pollParams.movie_id === '0' || !pollParams.time) return;
+
+            function pollBookedSeats() {
+                const qs = new URLSearchParams(pollParams).toString();
+                fetch('api-booked-seats.php?' + qs)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (!data.bookedSeats) return;
+                        const freshBooked = new Set(data.bookedSeats);
+                        // Also normalize with alternate format (e.g. "A1" vs "A-1")
+                        data.bookedSeats.forEach(s => {
+                            freshBooked.add(s);
+                            // Add alternate format
+                            if (s.includes('-')) freshBooked.add(s.replace('-', ''));
+                            else freshBooked.add(s.charAt(0) + '-' + s.substring(1));
+                        });
+
+                        document.querySelectorAll('.seat').forEach(seat => {
+                            const seatId = seat.getAttribute('data-seat');
+                            if (!seatId) return;
+                            const seatIdAlt = seatId.includes('-') ? seatId.replace('-', '') : seatId.charAt(0) + '-' + seatId.substring(1);
+
+                            if ((freshBooked.has(seatId) || freshBooked.has(seatIdAlt)) && !seat.classList.contains('booked')) {
+                                // This seat was just booked by someone else
+                                seat.classList.add('booked');
+                                seat.classList.remove('selected');
+                                seat.setAttribute('aria-disabled', 'true');
+                                seat.setAttribute('tabindex', '-1');
+
+                                // If current user had selected it, remove from their selection
+                                if (selectedSeats.has(seatId)) {
+                                    selectedSeats.delete(seatId);
+                                    updateProceedBtn();
+                                    // Briefly highlight the newly-taken seat
+                                    seat.style.transition = 'transform 0.3s, box-shadow 0.3s';
+                                    seat.style.transform = 'scale(1.3)';
+                                    seat.style.boxShadow = '0 0 12px rgba(255,0,0,0.7)';
+                                    setTimeout(() => {
+                                        seat.style.transform = '';
+                                        seat.style.boxShadow = '';
+                                    }, 600);
+                                }
+                            }
+                        });
+                    })
+                    .catch(() => { /* silently ignore network errors */ });
+            }
+
+            setInterval(pollBookedSeats, POLL_INTERVAL);
+        })();
 
     </script>
     <?php include 'seat-pov.php'; ?>

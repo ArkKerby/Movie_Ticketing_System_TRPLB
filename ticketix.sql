@@ -3,11 +3,11 @@
 --  Reflects the post-migration state. Safe to run on a fresh DB.
 --
 --  Tables: 15
---    BRANCH, USER_ACCOUNT, MOVIE, CINEMA_NUMBER,
---    MOVIE_SCHEDULE, CINEMA_MOVIE_ASSIGNMENT,
---    RESERVE, RESERVE_SEAT, TICKET, TICKET_FOOD,
---    FOOD, USER_PAYMENT_METHODS, DISCOUNT_APPLICATIONS,
---    ADMIN_NOTIFICATIONS, CINEMA_MOVIE_ASSIGNMENT
+--    ADMIN_NOTIFICATION, MOVIE, USER_PAYMENT_METHODS,
+--    BRANCH, USER_ACCOUNT, EMAIL_VERIFICATION,
+--    CINEMA_NUMBER, MOVIE_SCHEDULE, CINEMA_MOVIE_ASSIGNMENT,
+--    RESERVE, DISCOUNT_APPLICATIONS, TICKET,
+--    RESERVE_SEAT, FOOD, TICKET_FOOD
 -- ============================================================
 
 CREATE DATABASE IF NOT EXISTS TICKETIX CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
@@ -26,7 +26,8 @@ DROP TABLE IF EXISTS CINEMA_NUMBER;
 DROP TABLE IF EXISTS MOVIE;
 DROP TABLE IF EXISTS USER_PAYMENT_METHODS;
 DROP TABLE IF EXISTS DISCOUNT_APPLICATIONS;
-DROP TABLE IF EXISTS ADMIN_NOTIFICATIONS;
+DROP TABLE IF EXISTS ADMIN_NOTIFICATION;
+DROP TABLE IF EXISTS EMAIL_VERIFICATION;
 DROP TABLE IF EXISTS USER_ACCOUNT;
 DROP TABLE IF EXISTS FOOD;
 DROP TABLE IF EXISTS BRANCH;
@@ -66,7 +67,22 @@ CREATE TABLE USER_ACCOUNT (
 ) ENGINE=InnoDB;
 
 -- ================================================================
--- 3. MOVIE
+-- 3. EMAIL_VERIFICATION
+-- ================================================================
+CREATE TABLE EMAIL_VERIFICATION (
+    id         INT AUTO_INCREMENT PRIMARY KEY,
+    acc_id     INT          NOT NULL,
+    token      VARCHAR(255) NOT NULL,
+    expires_at DATETIME     NOT NULL,
+    used_at    DATETIME     DEFAULT NULL,
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX (acc_id),
+    UNIQUE KEY token_unique (token),
+    FOREIGN KEY (acc_id) REFERENCES USER_ACCOUNT(acc_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ================================================================
+-- 4. MOVIE
 -- ================================================================
 CREATE TABLE MOVIE (
     movie_show_id  INT          PRIMARY KEY AUTO_INCREMENT,
@@ -87,7 +103,7 @@ CREATE TABLE MOVIE (
 CREATE INDEX idx_is_deleted ON MOVIE(is_deleted);
 
 -- ================================================================
--- 4. CINEMA_NUMBER  (each branch has multiple screens)
+-- 5. CINEMA_NUMBER  (each branch has multiple screens)
 -- ================================================================
 CREATE TABLE CINEMA_NUMBER (
     cinema_number_id INT PRIMARY KEY AUTO_INCREMENT,
@@ -103,7 +119,7 @@ INSERT INTO CINEMA_NUMBER (branch_id, cinema_name, capacity) VALUES
 (1,'Cinema 3',120);
 
 -- ================================================================
--- 5. MOVIE_SCHEDULE
+-- 6. MOVIE_SCHEDULE
 -- ================================================================
 CREATE TABLE MOVIE_SCHEDULE (
     schedule_id   INT PRIMARY KEY AUTO_INCREMENT,
@@ -116,7 +132,7 @@ CREATE TABLE MOVIE_SCHEDULE (
 ) ENGINE=InnoDB;
 
 -- ================================================================
--- 6. CINEMA_MOVIE_ASSIGNMENT
+-- 7. CINEMA_MOVIE_ASSIGNMENT
 -- ================================================================
 CREATE TABLE CINEMA_MOVIE_ASSIGNMENT (
     assignment_id    INT      PRIMARY KEY AUTO_INCREMENT,
@@ -130,7 +146,7 @@ CREATE TABLE CINEMA_MOVIE_ASSIGNMENT (
 ) ENGINE=InnoDB;
 
 -- ================================================================
--- 7. RESERVE
+-- 8. RESERVE
 -- ================================================================
 CREATE TABLE RESERVE (
     reservation_id INT          PRIMARY KEY AUTO_INCREMENT,
@@ -150,7 +166,7 @@ CREATE TABLE RESERVE (
 ) ENGINE=InnoDB;
 
 -- ================================================================
--- 8. RESERVE_SEAT
+-- 9. RESERVE_SEAT
 --    seat_number stored directly (no FK to SEAT — SEAT table removed)
 -- ================================================================
 CREATE TABLE RESERVE_SEAT (
@@ -161,7 +177,7 @@ CREATE TABLE RESERVE_SEAT (
 ) ENGINE=InnoDB;
 
 -- ================================================================
--- 9. FOOD
+-- 10. FOOD
 -- ================================================================
 CREATE TABLE FOOD (
     food_id    INT           PRIMARY KEY AUTO_INCREMENT,
@@ -180,7 +196,7 @@ INSERT INTO FOOD (food_name, food_price, image_path) VALUES
 ('Popcorn',       40.00, 'images/popcorn-solo.png');
 
 -- ================================================================
--- 10. TICKET
+-- 11. TICKET
 --     Payment columns merged in (PAYMENT table removed in consolidation)
 -- ================================================================
 CREATE TABLE TICKET (
@@ -201,7 +217,7 @@ CREATE TABLE TICKET (
 ) ENGINE=InnoDB;
 
 -- ================================================================
--- 11. TICKET_FOOD
+-- 12. TICKET_FOOD
 -- ================================================================
 CREATE TABLE TICKET_FOOD (
     ticket_food_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -214,7 +230,7 @@ CREATE TABLE TICKET_FOOD (
 ) ENGINE=InnoDB;
 
 -- ================================================================
--- 12. USER_PAYMENT_METHODS
+-- 13. USER_PAYMENT_METHODS
 -- ================================================================
 CREATE TABLE USER_PAYMENT_METHODS (
     payment_method_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -235,7 +251,7 @@ CREATE TABLE USER_PAYMENT_METHODS (
 ) ENGINE=InnoDB;
 
 -- ================================================================
--- 13. DISCOUNT_APPLICATIONS
+-- 14. DISCOUNT_APPLICATIONS
 --     Unified table for both PWD and Senior Citizen applications
 --     (replaces the old PWD_APPLICATIONS + SENIOR_APPLICATIONS tables)
 -- ================================================================
@@ -255,9 +271,9 @@ CREATE TABLE DISCOUNT_APPLICATIONS (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- ================================================================
--- 14. ADMIN_NOTIFICATIONS
+-- 15. ADMIN_NOTIFICATION
 -- ================================================================
-CREATE TABLE ADMIN_NOTIFICATIONS (
+CREATE TABLE ADMIN_NOTIFICATION (
     notif_id     INT         PRIMARY KEY AUTO_INCREMENT,
     type         VARCHAR(50) NOT NULL,
     message      TEXT        NOT NULL,

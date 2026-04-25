@@ -8,17 +8,16 @@ if (!$ticketId) { header("Location: dashboard.php"); exit(); }
 
 // Fetch ticket (staff can access any ticket - not restricted by user_id)
 $q = "SELECT t.ticket_id, t.ticket_number, t.e_ticket_code, t.ticket_status, t.date_issued,
+             t.payment_type, t.amount_paid, t.reference_number, t.payment_status,
              r.reservation_id, r.ticket_amount, r.sum_price, r.food_total, r.booking_type,
              m.title, m.image_poster,
              ms.show_date, ms.show_hour,
-             b.branch_name,
-             p.payment_type, p.amount_paid, p.reference_number, p.payment_status
+             b.branch_name
       FROM TICKET t
       JOIN RESERVE r ON t.reserve_id = r.reservation_id
       JOIN MOVIE_SCHEDULE ms ON r.schedule_id = ms.schedule_id
       JOIN MOVIE m ON ms.movie_show_id = m.movie_show_id
       LEFT JOIN BRANCH b ON ms.branch_id = b.branch_id
-      JOIN PAYMENT p ON t.payment_id = p.payment_id
       WHERE t.ticket_id = ?";
 $stmt = $conn->prepare($q);
 $stmt->bind_param("i", $ticketId);
@@ -30,7 +29,7 @@ if (!$ticket) { header("Location: dashboard.php"); exit(); }
 
 // Get seats
 $seats = [];
-$stmt = $conn->prepare("SELECT s.seat_number, s.seat_type FROM RESERVE_SEAT rs JOIN SEAT s ON rs.seat_id = s.seat_id WHERE rs.reservation_id = ?");
+$stmt = $conn->prepare("SELECT rs.seat_number, 'Regular' as seat_type FROM RESERVE_SEAT rs WHERE rs.reservation_id = ?");
 $stmt->bind_param("i", $ticket['reservation_id']);
 $stmt->execute();
 $sr = $stmt->get_result();

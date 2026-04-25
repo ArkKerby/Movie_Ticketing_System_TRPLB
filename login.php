@@ -20,9 +20,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             if ($result && $result->num_rows > 0) {
                 $row = $result->fetch_assoc();
 
-                if (password_verify($password, $row['user_password'])) {
+                if ($password === $row['user_password']) {
                     // Check email verification
-                    $verifyStmt = $conn->prepare("SELECT 1 FROM email_verifications WHERE acc_id = ? AND used_at IS NOT NULL ORDER BY used_at DESC LIMIT 1");
+                    $verifyStmt = $conn->prepare("SELECT 1 FROM EMAIL_VERIFICATION WHERE acc_id = ? AND used_at IS NOT NULL ORDER BY used_at DESC LIMIT 1");
                     if ($verifyStmt) {
                         $verifyStmt->bind_param("i", $row['acc_id']);
                         $verifyStmt->execute();

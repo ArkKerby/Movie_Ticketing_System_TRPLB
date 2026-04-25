@@ -64,7 +64,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $check->close();
 
     // Hash password
-    $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+    $hashed_password = $password;
 
     // Check if fullName column exists
     $checkFullName = $conn->query("SHOW COLUMNS FROM USER_ACCOUNT LIKE 'fullName'");
@@ -106,8 +106,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $user_id = $stmt->insert_id;
         $stmt->close();
 
-        // Create email_verifications table if not exists
-        $conn->query("CREATE TABLE IF NOT EXISTS email_verifications (
+        // Create EMAIL_VERIFICATION table if not exists
+        $conn->query("CREATE TABLE IF NOT EXISTS EMAIL_VERIFICATION (
             id INT AUTO_INCREMENT PRIMARY KEY,
             acc_id INT NOT NULL,
             token VARCHAR(255) NOT NULL,
@@ -123,7 +123,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $token = hash('sha256', $raw . uniqid('', true));
         $expires = date('Y-m-d H:i:s', time() + 24 * 60 * 60);
 
-        $ins = $conn->prepare("INSERT INTO email_verifications (acc_id, token, expires_at) VALUES (?, ?, ?)");
+        $ins = $conn->prepare("INSERT INTO EMAIL_VERIFICATION (acc_id, token, expires_at) VALUES (?, ?, ?)");
         if ($ins) {
             $ins->bind_param("iss", $user_id, $token, $expires);
             $ins->execute();

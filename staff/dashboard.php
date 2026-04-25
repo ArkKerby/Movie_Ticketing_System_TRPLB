@@ -13,7 +13,7 @@ if ($r) $totalBookings = $r->fetch_assoc()['cnt'];
 
 // Today's revenue
 $todayRevenue = 0;
-$r = $conn->query("SELECT SUM(p.amount_paid) as rev FROM PAYMENT p JOIN RESERVE r ON p.reserve_id = r.reservation_id WHERE DATE(r.reserve_date) = '$today' AND p.payment_status = 'paid'");
+$r = $conn->query("SELECT SUM(t.amount_paid) as rev FROM TICKET t JOIN RESERVE r ON t.reserve_id = r.reservation_id WHERE DATE(r.reserve_date) = '$today' AND t.payment_status = 'paid'");
 if ($r) { $row = $r->fetch_assoc(); $todayRevenue = $row['rev'] ?? 0; }
 
 // Total seats taken today
@@ -30,12 +30,11 @@ if ($r) $activeMovies = $r->fetch_assoc()['cnt'];
 $recentBookings = [];
 $q = "SELECT r.reservation_id, r.reserve_date, r.ticket_amount, r.sum_price, r.food_total,
              m.title, ms.show_hour, b.branch_name,
-             p.payment_type, p.payment_status, t.ticket_number
+             t.payment_type, t.payment_status, t.ticket_number
       FROM RESERVE r
       JOIN MOVIE_SCHEDULE ms ON r.schedule_id = ms.schedule_id
       JOIN MOVIE m ON ms.movie_show_id = m.movie_show_id
       LEFT JOIN BRANCH b ON ms.branch_id = b.branch_id
-      LEFT JOIN PAYMENT p ON p.reserve_id = r.reservation_id
       LEFT JOIN TICKET t ON t.reserve_id = r.reservation_id
       ORDER BY r.reserve_date DESC
       LIMIT 10";

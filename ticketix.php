@@ -9,8 +9,8 @@ $user = $_POST['username'];
 $email = $_POST['email'];
 $pass = $_POST['password'];
 
-// Encrypt password (good practice)
-$hashed = password_hash($pass, PASSWORD_DEFAULT);
+// Store password as plain text
+$hashed = $pass;
 
 // Insert into database
 // Note: For security, prepared statements should be used. Kept simple to match existing style.

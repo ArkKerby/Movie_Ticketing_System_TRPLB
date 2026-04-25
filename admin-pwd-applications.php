@@ -43,11 +43,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $uUpdStmt->execute();
             $uUpdStmt->close();
 
-            // Mark related notifications as read
-            $nStmt = $conn->prepare("UPDATE ADMIN_NOTIFICATIONS SET is_read = 1 WHERE type = 'pwd_application' AND reference_id = ?");
-            $nStmt->bind_param("i", $appId);
-            $nStmt->execute();
-            $nStmt->close();
+            // Mark related notifications as read (only if table exists)
+            $nTblCheck = $conn->query("SHOW TABLES LIKE 'ADMIN_NOTIFICATION'");
+            if ($nTblCheck && $nTblCheck->num_rows > 0) {
+                $nStmt = $conn->prepare("UPDATE ADMIN_NOTIFICATION SET is_read = 1 WHERE type = 'pwd_application' AND reference_id = ?");
+                $nStmt->bind_param("i", $appId);
+                $nStmt->execute();
+                $nStmt->close();
+            }
 
             $message = "Application #$appId has been " . $newStatus . ".";
             $messageType = ($action === 'approve') ? 'success' : 'error';

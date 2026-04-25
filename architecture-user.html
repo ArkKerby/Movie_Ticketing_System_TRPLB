@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ticketix — User Software Architecture</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--bg:#0c0d10;--surface:#14151c;--border:#252535;--text:#e2e2f0;--muted:#6e6e90}
+    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:36px 16px 60px}
+    header{text-align:center;margin-bottom:24px}
+    header .badge{display:inline-block;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#6c63ff;border:1px solid #6c63ff;border-radius:20px;padding:4px 14px;margin-bottom:12px}
+    header h1{font-size:28px;font-weight:700;letter-spacing:-0.5px}
+    header h1 span{color:#6c63ff}
+    header p{color:var(--muted);font-size:13px;margin-top:5px}
+    .nav-tabs{display:flex;gap:10px;justify-content:center;margin-bottom:24px}
+    .nav-tab{font-size:12px;font-weight:600;text-decoration:none;padding:6px 18px;border-radius:20px;border:1.5px solid var(--border);color:var(--muted);transition:all .18s}
+    .nav-tab:hover{border-color:#6c63ff;color:#6c63ff}
+    .nav-tab.active{border-color:#6c63ff;background:#6c63ff18;color:#6c63ff}
+    .legend{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:28px}
+    .legend-item{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:500;color:var(--muted)}
+    .legend-dot{width:10px;height:10px;border-radius:3px}
+    .svg-scroll{width:100%;max-width:1200px;overflow-x:auto;border-radius:16px;border:1px solid var(--border);background:var(--surface)}
+    .arch-node{cursor:default}
+    .arch-node:hover .nb{filter:brightness(1.25)}
+    .nb{transition:filter .15s}
+  </style>
+</head>
+<body>
+<header>
+  <div class="badge">Software Architecture</div>
+  <h1>Ticketix — <span>User Module</span></h1>
+  <p>Client-side flow: Registration → Browse → Booking → Payment → Ticket</p>
+</header>
+<nav class="nav-tabs">
+  <a class="nav-tab active" href="architecture-user.html">👤 User Module</a>
+  <a class="nav-tab" href="architecture-staff.html">🧑‍💼 Staff Module</a>
+</nav>
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#6c63ff"></div>Authentication</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Movie Browsing</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Booking &amp; Seats</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Payment</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#06b6d4"></div>Ticket &amp; Confirm</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div>Profile &amp; Account</div>
+</div>
+<div class="svg-scroll">
+  <svg id="arch" width="1200" height="1640" xmlns="http://www.w3.org/2000/svg"><defs></defs></svg>
+</div>
+<script>
+const CATS={
+  auth:   {bg:'#1e1b3a',border:'#6c63ff',text:'#ede9ff'},
+  browse: {bg:'#0d2818',border:'#22c55e',text:'#dcfce7'},
+  book:   {bg:'#261f04',border:'#f59e0b',text:'#fef3c7'},
+  pay:    {bg:'#2d1010',border:'#ef4444',text:'#fee2e2'},
+  ticket: {bg:'#062228',border:'#06b6d4',text:'#cffafe'},
+  profile:{bg:'#200b38',border:'#a855f7',text:'#f3e8ff'},
+};
+const NODES=[
+  {id:'home',    cx:490,cy:87,  w:148,h:58,icon:'🏠',label:'Home',             file:'ticketix.php',            cat:'auth'},
+  {id:'signup',  cx:175,cy:202, w:148,h:58,icon:'📝',label:'Sign Up',          file:'signup.php',              cat:'auth'},
+  {id:'verify',  cx:175,cy:322, w:155,h:58,icon:'✉️', label:'Verify Email',    file:'verify-email.php',        cat:'auth'},
+  {id:'login',   cx:490,cy:202, w:142,h:58,icon:'🔐',label:'Login',            file:'login.php',               cat:'auth'},
+  {id:'forgot',  cx:845,cy:202, w:170,h:58,icon:'🔑',label:'Forgot Password',  file:'forgotpassword.php',      cat:'auth'},
+  {id:'reset',   cx:845,cy:322, w:168,h:58,icon:'🔄',label:'Reset Password',   file:'password-reset.php',      cat:'auth'},
+  {id:'branch',  cx:490,cy:445, w:168,h:58,icon:'📍',label:'Branch Selection', file:'branch-selection.php',    cat:'browse'},
+  {id:'movies',  cx:490,cy:558, w:162,h:58,icon:'🎬',label:'Movie Listings',   file:'select-movie-branch.php', cat:'browse'},
+  {id:'search',  cx:845,cy:558, w:138,h:58,icon:'🔍',label:'Search',           file:'search.php',              cat:'browse'},
+  {id:'shows',   cx:490,cy:668, w:148,h:58,icon:'🗓️',label:'View Shows',      file:'view-shows.php',          cat:'browse'},
+  {id:'seats',   cx:490,cy:778, w:168,h:58,icon:'🪑',label:'Seat Reservation', file:'seat-reservation.php',    cat:'book'},
+  {id:'pov',     cx:845,cy:778, w:140,h:58,icon:'👁️',label:'Seat POV',        file:'seat-pov.php',            cat:'book'},
+  {id:'api',     cx:175,cy:778, w:155,h:58,icon:'📡',label:'Live Seat API',    file:'api-booked-seats.php',    cat:'book'},
+  {id:'food',    cx:490,cy:888, w:152,h:58,icon:'🍿',label:'Food Add-ons',     file:'checkout.php',            cat:'book'},
+  {id:'discount',cx:845,cy:888, w:165,h:58,icon:'♿',label:'Discount Apply',   file:'admin-pwd-apps.php',      cat:'book'},
+  {id:'process', cx:490,cy:995, w:165,h:58,icon:'⚙️',label:'Process Booking', file:'process-booking.php',     cat:'book'},
+  {id:'payment', cx:490,cy:1100,w:155,h:58,icon:'💳',label:'Payment Page',     file:'payment.php',             cat:'pay'},
+  {id:'methods', cx:175,cy:1100,w:168,h:58,icon:'💰',label:'Payment Methods',  file:'account-settings.php',   cat:'pay'},
+  {id:'summary', cx:490,cy:1205,w:165,h:58,icon:'📋',label:'Booking Summary',  file:'proceed-booking.php',    cat:'pay'},
+  {id:'email_r', cx:845,cy:1205,w:180,h:58,icon:'📧',label:'Send Receipt Email',file:'send-booking-email.php', cat:'pay'},
+  {id:'ticket',  cx:490,cy:1315,w:148,h:58,icon:'🎟️',label:'View Ticket',     file:'ticket.php',              cat:'ticket'},
+  {id:'pdf',     cx:175,cy:1425,w:162,h:58,icon:'📄',label:'Download PDF',     file:'generate-booking-pdf.php',cat:'ticket'},
+  {id:'email_t', cx:490,cy:1425,w:148,h:58,icon:'📨',label:'Email Ticket',     file:'send-ticket-email.php',   cat:'ticket'},
+  {id:'bookings',cx:845,cy:1425,w:148,h:58,icon:'📚',label:'My Bookings',      file:'my-bookings.php',         cat:'ticket'},
+  {id:'profile', cx:175,cy:1535,w:148,h:58,icon:'👤',label:'My Profile',       file:'profile.php',             cat:'profile'},
+  {id:'accs',    cx:490,cy:1535,w:168,h:58,icon:'⚙️',label:'Account Settings', file:'account-settings.php',   cat:'profile'},
+  {id:'remind',  cx:845,cy:1535,w:168,h:58,icon:'🔔',label:'Reminder Emails',  file:'send-reminder-emails.php',cat:'profile'},
+];
+const CONNS=[
+  {f:'home',   t:'signup',   fe:'left',   te:'top',   label:'New User'},
+  {f:'home',   t:'login',    fe:'bottom', te:'top',   label:''},
+  {f:'home',   t:'forgot',   fe:'right',  te:'top',   label:'Forgot?'},
+  {f:'signup', t:'verify',   fe:'bottom', te:'top',   label:'Email Sent'},
+  {f:'verify', t:'login',    fe:'top',    te:'left',  label:'Verified ✓'},
+  {f:'forgot', t:'reset',    fe:'bottom', te:'top',   label:'Link Sent'},
+  {f:'reset',  t:'login',    fe:'top',    te:'right', label:'Reset Done'},
+  {f:'login',  t:'branch',   fe:'bottom', te:'top',   label:'Authenticated'},
+  {f:'branch', t:'movies',   fe:'bottom', te:'top',   label:''},
+  {f:'movies', t:'search',   fe:'right',  te:'left',  label:'Search'},
+  {f:'movies', t:'shows',    fe:'bottom', te:'top',   label:''},
+  {f:'shows',  t:'seats',    fe:'bottom', te:'top',   label:''},
+  {f:'seats',  t:'pov',      fe:'right',  te:'left',  label:'360° View'},
+  {f:'seats',  t:'api',      fe:'left',   te:'right', label:'Real-time'},
+  {f:'seats',  t:'food',     fe:'bottom', te:'top',   label:''},
+  {f:'food',   t:'discount', fe:'right',  te:'left',  label:'PWD/Senior'},
+  {f:'food',   t:'process',  fe:'bottom', te:'top',   label:''},
+  {f:'process',t:'payment',  fe:'bottom', te:'top',   label:''},
+  {f:'methods',t:'payment',  fe:'right',  te:'left',  label:'Saved Card'},
+  {f:'payment',t:'summary',  fe:'bottom', te:'top',   label:''},
+  {f:'summary',t:'email_r',  fe:'right',  te:'left',  label:'Auto-Send'},
+  {f:'summary',t:'ticket',   fe:'bottom', te:'top',   label:''},
+  {f:'ticket', t:'pdf',      fe:'left',   te:'top',   label:'Download'},
+  {f:'ticket', t:'email_t',  fe:'bottom', te:'top',   label:''},
+  {f:'ticket', t:'bookings', fe:'right',  te:'top',   label:'History'},
+  {f:'profile',t:'accs',     fe:'right',  te:'left',  label:''},
+  {f:'accs',   t:'remind',   fe:'right',  te:'left',  label:''},
+];
+const SECTIONS=[
+  {label:'AUTHENTICATION',cat:'auth',   y:40,  h:335},
+  {label:'MOVIE BROWSING', cat:'browse', y:395, h:325},
+  {label:'SEAT BOOKING',   cat:'book',   y:740, h:310},
+  {label:'PAYMENT',        cat:'pay',    y:1062,h:200},
+  {label:'TICKETS',        cat:'ticket', y:1278,h:205},
+  {label:'PROFILE',        cat:'profile',y:1498,h:107},
+];
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs={},parent){
+  const e=document.createElementNS(NS,tag);
+  Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v));
+  if(parent)parent.appendChild(e);
+  return e;
+}
+function gn(id){return NODES.find(n=>n.id===id)}
+function ep(n,edge){
+  switch(edge){
+    case'top':   return[n.cx,n.cy-n.h/2];
+    case'bottom':return[n.cx,n.cy+n.h/2];
+    case'left':  return[n.cx-n.w/2,n.cy];
+    case'right': return[n.cx+n.w/2,n.cy];
+  }
+}
+function bp(from,to,fe,te){
+  const fp=ep(from,fe),tp=ep(to,te);
+  const dist=Math.hypot(tp[0]-fp[0],tp[1]-fp[1]);
+  const t=Math.min(dist*.45,90);
+  const dir={top:[0,-1],bottom:[0,1],left:[-1,0],right:[1,0]};
+  const fd=dir[fe],td=dir[te];
+  const c1=[fp[0]+fd[0]*t,fp[1]+fd[1]*t];
+  const c2=[tp[0]+td[0]*t,tp[1]+td[1]*t];
+  const d=`M${fp[0]},${fp[1]} C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${tp[0]},${tp[1]}`;
+  const mx=.125*fp[0]+.375*c1[0]+.375*c2[0]+.125*tp[0];
+  const my=.125*fp[1]+.375*c1[1]+.375*c2[1]+.125*tp[1];
+  return{d,mid:[mx,my]};
+}
+function render(){
+  const svg=document.getElementById('arch');
+  const defs=svg.querySelector('defs');
+  // shadow filter
+  const flt=el('filter',{id:'ns',x:'-20%',y:'-20%',width:'140%',height:'140%'},defs);
+  el('feDropShadow',{dx:'0',dy:'3',stdDeviation:'5','flood-color':'#000','flood-opacity':'0.4'},flt);
+  // arrows
+  Object.entries(CATS).forEach(([cat,c])=>{
+    const m=el('marker',{id:`arr-${cat}`,markerWidth:'8',markerHeight:'6',refX:'7',refY:'3',orient:'auto'},defs);
+    el('polygon',{points:'0 0, 8 3, 0 6',fill:c.border},m);
+  });
+  // sections
+  const sg=el('g',{},svg);
+  SECTIONS.forEach(s=>{
+    const c=CATS[s.cat];
+    el('rect',{x:34,y:s.y,width:1132,height:s.h,rx:14,fill:c.border+'12',stroke:c.border+'45','stroke-width':'1'},sg);
+    const t=el('text',{transform:`translate(20,${s.y+s.h/2}) rotate(-90)`,'text-anchor':'middle','font-size':'9','font-weight':'700','letter-spacing':'1.8',fill:c.border,opacity:'0.85'},sg);
+    t.textContent=s.label;
+  });
+  // connections
+  const cg=el('g',{},svg);
+  const lg=el('g',{},svg);
+  CONNS.forEach(conn=>{
+    const fn=gn(conn.f),tn=gn(conn.t);
+    if(!fn||!tn)return;
+    const c=CATS[fn.cat];
+    const{d,mid}=bp(fn,tn,conn.fe,conn.te);
+    el('path',{d,fill:'none',stroke:c.border,'stroke-width':'1.8',opacity:'0.75','marker-end':`url(#arr-${fn.cat})`},cg);
+    if(conn.label){
+      const t=el('text',{x:mid[0],y:mid[1],'text-anchor':'middle','dominant-baseline':'middle','font-size':'9.5','font-weight':'600',fill:c.border,stroke:'#0c0d10','stroke-width':'5','paint-order':'stroke','font-family':'Inter,sans-serif'},lg);
+      t.textContent=conn.label;
+    }
+  });
+  // nodes
+  const ng=el('g',{},svg);
+  NODES.forEach(n=>{
+    const c=CATS[n.cat];
+    const hw=n.w/2,hh=n.h/2;
+    const g=el('g',{class:'arch-node',transform:`translate(${n.cx},${n.cy})`},ng);
+    el('rect',{class:'nb',x:-hw,y:-hh,width:n.w,height:n.h,rx:10,fill:c.bg,stroke:c.border,'stroke-width':'1.5',filter:'url(#ns)'},g);
+    const lbl=el('text',{x:0,y:-7,'text-anchor':'middle','dominant-baseline':'middle','font-size':'12','font-weight':'600',fill:c.text,'font-family':'Inter,sans-serif'},g);
+    lbl.textContent=`${n.icon} ${n.label}`;
+    const fi=el('text',{x:0,y:11,'text-anchor':'middle','dominant-baseline':'middle','font-size':'9.5',fill:c.text,opacity:'0.6','font-family':'"Courier New",monospace'},g);
+    fi.textContent=n.file;
+    const tt=document.createElementNS(NS,'title');
+    tt.textContent=n.file;
+    g.appendChild(tt);
+  });
+}
+render();
+</script>
+</body>
+</html>

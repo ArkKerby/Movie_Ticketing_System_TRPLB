@@ -151,12 +151,19 @@ if ($userId) {
     $discountRow = $discountStmt->get_result()->fetch_assoc();
     $discountStmt->close();
     if ($discountRow) {
+        // Discount applies to ONLY 1 seat (cheapest seat in the order)
+        $cheapestSeatPrice = 0;
+        if (!empty($seatDetails)) {
+            $cheapestSeatPrice = min(array_column($seatDetails, 'price'));
+        } elseif ($seatCount > 0) {
+            $cheapestSeatPrice = $seatTotal / $seatCount; // fallback: average price
+        }
         if (!empty($discountRow['pwd_approved'])) {
             $pwdApproved = true;
-            $pwdDiscount = $seatTotal * 0.20;
+            $pwdDiscount = $cheapestSeatPrice * 0.20;
         } elseif (!empty($discountRow['senior_approved'])) {
             $seniorApproved = true;
-            $seniorDiscount = $seatTotal * 0.20;
+            $seniorDiscount = $cheapestSeatPrice * 0.20;
         }
     }
 }
@@ -330,13 +337,13 @@ $grandTotal = $seatTotal + $foodTotal - $pwdDiscount - $seniorDiscount;
             <?php endif; ?>
             <?php if ($pwdApproved): ?>
             <div class="price-row" style="color:#8ec98e;">
-                <span>PWD Discount (20% off seats):</span>
+                <span>PWD Discount (20% off 1 seat):</span>
                 <span>- ₱<?= number_format($pwdDiscount, 2) ?></span>
             </div>
             <?php endif; ?>
             <?php if ($seniorApproved): ?>
             <div class="price-row" style="color:#8ec98e;">
-                <span>Senior Citizen Discount (20% off seats):</span>
+                <span>Senior Citizen Discount (20% off 1 seat):</span>
                 <span>- ₱<?= number_format($seniorDiscount, 2) ?></span>
             </div>
             <?php endif; ?>

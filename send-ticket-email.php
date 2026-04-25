@@ -2,10 +2,74 @@
 /**
  * Send booking confirmation email to user
  * 
- * @param int $ticketId Ticket ID
- * @param object $conn Database connection
- * @return bool Success status
+ * This file:
+ *  1. Defines sendBookingConfirmationEmail() for use by other scripts.
+ *  2. Handles direct AJAX POST requests from my-bookings.php Download button.
  */
+
+// --- Handle AJAX POST request (from my-bookings.php "Download" button) ---
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ticket_id'])) {
+    session_start();
+    header('Content-Type: application/json');
+    require_once __DIR__ . '/config.php';
+    $conn = getDBConnection();
+
+    $ticketId = intval($_POST['ticket_id']);
+
+    // Verify the user owns this ticket (security check)
+    $userId = $_SESSION['user_id'] ?? $_SESSION['acc_id'] ?? null;
+    if (!$userId) {
+        echo json_encode(['success' => false, 'message' => 'You must be logged in to download tickets.']);
+        exit;
+    }
+
+    // Verify ticket belongs to user
+    $verifyStmt = $conn->prepare("
+        SELECT t.ticket_id 
+        FROM TICKET t 
+        JOIN RESERVE r ON t.reserve_id = r.reservation_id 
+        WHERE t.ticket_id = ? AND r.acc_id = ?
+    ");
+    $verifyStmt->bind_param("ii", $ticketId, $userId);
+    $verifyStmt->execute();
+    $verifyResult = $verifyStmt->get_result();
+    if ($verifyResult->num_rows === 0) {
+        echo json_encode(['success' => false, 'message' => 'Ticket not found or access denied.']);
+        $verifyStmt->close();
+        exit;
+    }
+    $verifyStmt->close();
+
+    // Call the function defined below
+    $success = sendBookingConfirmationEmail($ticketId, $conn);
+
+    if ($success) {
+        echo json_encode(['success' => true, 'message' => 'Your ticket receipt has been sent to your email. Please check your inbox or spam folder.']);
+    } else {
+        // Check if the reason is that booking is not yet approved
+        $statusStmt = $conn->prepare("
+            SELECT COALESCE(r.booking_status, 'approved') as booking_status
+            FROM TICKET t 
+            JOIN RESERVE r ON t.reserve_id = r.reservation_id 
+            WHERE t.ticket_id = ?
+        ");
+        $statusStmt->bind_param("i", $ticketId);
+        $statusStmt->execute();
+        $statusRow = $statusStmt->get_result()->fetch_assoc();
+        $statusStmt->close();
+
+        if ($statusRow && $statusRow['booking_status'] !== 'approved') {
+            echo json_encode(['success' => false, 'message' => 'Cannot send ticket — your booking is still pending approval.']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'Failed to send email. Please check your email settings or try again later.']);
+        }
+    }
+    $conn->close();
+    exit;
+}
+
+// --- Function definition (used by both the handler above and other scripts) ---
+
 function sendBookingConfirmationEmail($ticketId, $conn) {
     require_once __DIR__ . '/mailer.php';
     
@@ -118,125 +182,286 @@ function sendBookingConfirmationEmail($ticketId, $conn) {
     $movieTitle = htmlspecialchars($ticket['title']);
     $branchName = htmlspecialchars($branchDisplay);
     $ticketNumber = htmlspecialchars($ticket['ticket_number']);
+    $seatCount = count($seats);
+    $amountPaidFormatted = number_format($ticket['amount_paid'], 2);
+    $refNum = htmlspecialchars($ticket['reference_number'] ?? '');
     $seatsList = implode(', ', $seats);
-    $paymentType = ucfirst(str_replace('-', ' ', $ticket['payment_type']));
-    
+    $issuedDate = date('F d, Y g:i A', strtotime($ticket['date_issued'] ?? 'now'));
+    $paymentType = ucfirst(str_replace('-', ' ', $ticket['payment_type'] ?? 'N/A'));
+
+    // Build food rows HTML
+    $foodRowsHtml = '';
+    if (!empty($foodItems)) {
+        $foodRowsHtml .= "
+            <tr>
+                <td colspan='2' style='padding:8px 14px;background:#e6ecff;font-size:12px;font-weight:700;color:#3b5fc0;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid #d0d8f0;'>
+                    Food &amp; Drinks
+                </td>
+            </tr>";
+        $foodAlt = false;
+        foreach ($foodItems as $food) {
+            $foodName = htmlspecialchars($food['food_name']);
+            $quantity = $food['quantity'];
+            $subtotal = number_format($food['food_price'] * $quantity, 2);
+            $bgColor = $foodAlt ? '#f9fafb' : '#ffffff';
+            $foodRowsHtml .= "
+            <tr>
+                <td style='padding:8px 14px;font-size:13px;color:#6b7280;background:$bgColor;border-bottom:1px solid #d0d8f0;'>$foodName &times;$quantity</td>
+                <td style='padding:8px 14px;font-size:13px;font-weight:700;color:#111827;background:$bgColor;border-bottom:1px solid #d0d8f0;text-align:right;'>&#8369;$subtotal</td>
+            </tr>";
+            $foodAlt = !$foodAlt;
+        }
+        $foodRowsHtml .= "
+            <tr>
+                <td style='padding:8px 14px;font-size:13px;color:#6b7280;background:#f9fafb;border-bottom:1px solid #d0d8f0;'>Food Subtotal</td>
+                <td style='padding:8px 14px;font-size:13px;font-weight:700;color:#111827;background:#f9fafb;border-bottom:1px solid #d0d8f0;text-align:right;'>&#8369;" . number_format($foodTotal, 2) . "</td>
+            </tr>";
+    }
+
+    // Reference number row
+    $refRowHtml = '';
+    if ($refNum) {
+        $refRowHtml = "
+            <tr>
+                <td style='padding:8px 14px;font-size:13px;color:#6b7280;background:#f9fafb;border-bottom:1px solid #d0d8f0;'>Reference #</td>
+                <td style='padding:8px 14px;font-size:13px;font-weight:700;color:#111827;background:#f9fafb;border-bottom:1px solid #d0d8f0;text-align:right;'>$refNum</td>
+            </tr>";
+    }
+
+    // QR code via public API
+    $qrData = htmlspecialchars($ticket['e_ticket_code'] ?? $ticket['ticket_number'] ?? ('TICKET-' . $ticketId));
+    $qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' . urlencode($qrData);
+
+    // Reminders list
+    $reminderFood = '';
+    if (!empty($foodItems)) {
+        $reminderFood = "<li style='margin-bottom:6px;'>Your food orders will be ready for pickup at the designated stalls</li>";
+    }
+
     $emailBody = "
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset='UTF-8'>
-        <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-            .ticket-box { background: white; border: 2px solid #667eea; border-radius: 10px; padding: 20px; margin: 20px 0; }
-            .info-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e0e0e0; }
-            .info-row:last-child { border-bottom: none; }
-            .info-label { font-weight: bold; color: #666; }
-            .info-value { color: #333; }
-            .btn { display: inline-block; padding: 12px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .food-item { background: #f0f0f0; padding: 10px; margin: 5px 0; border-radius: 5px; }
-            .footer { text-align: center; color: #666; font-size: 0.9em; margin-top: 30px; }
-        </style>
+        <meta name='viewport' content='width=device-width, initial-scale=1.0'>
     </head>
-    <body>
-        <div class='container'>
-            <div class='header'>
-                <h1>🎬 Booking Confirmed!</h1>
-                <p>Thank you for your booking, $userName!</p>
-            </div>
-            <div class='content'>
-                <p>Your movie ticket has been successfully booked. Here are your booking details:</p>
-                
-                <div class='ticket-box'>
-                    <h2 style='margin-top: 0; color: #667eea;'>$movieTitle</h2>
-                    <div class='info-row'>
-                        <span class='info-label'>Ticket Number:</span>
-                        <span class='info-value'><strong>$ticketNumber</strong></span>
-                    </div>
-                    <div class='info-row'>
-                        <span class='info-label'>Branch:</span>
-                        <span class='info-value'>$branchName</span>
-                    </div>
-                    <div class='info-row'>
-                        <span class='info-label'>Show Date:</span>
-                        <span class='info-value'>$showDate</span>
-                    </div>
-                    <div class='info-row'>
-                        <span class='info-label'>Show Time:</span>
-                        <span class='info-value'>$showTime</span>
-                    </div>
-                    <div class='info-row'>
-                        <span class='info-label'>Seats:</span>
-                        <span class='info-value'><strong>$seatsList</strong></span>
-                    </div>
-                    <div class='info-row'>
-                        <span class='info-label'>Number of Seats:</span>
-                        <span class='info-value'>" . count($seats) . " seat(s)</span>
-                    </div>
-                    <div class='info-row'>
-                        <span class='info-label'>Payment Method:</span>
-                        <span class='info-value'>$paymentType</span>
-                    </div>
-                    <div class='info-row'>
-                        <span class='info-label'>Total Amount:</span>
-                        <span class='info-value'><strong>₱" . number_format($ticket['amount_paid'], 2) . "</strong></span>
-                    </div>
-                    <div class='info-row'>
-                        <span class='info-label'>Booking Date:</span>
-                        <span class='info-value'>$reserveDate</span>
-                    </div>
-                </div>
-    ";
-    
-    // Add food items if any
-    if (!empty($foodItems)) {
-        $emailBody .= "
-                <h3 style='color: #667eea; margin-top: 30px;'>Food Orders:</h3>
-        ";
-        foreach ($foodItems as $food) {
-            $foodName = htmlspecialchars($food['food_name']);
-            $quantity = $food['quantity'];
-            $foodPrice = number_format($food['food_price'], 2);
-            $subtotal = number_format($food['food_price'] * $quantity, 2);
-            $emailBody .= "
-                <div class='food-item'>
-                    <strong>$foodName</strong> × $quantity = ₱$subtotal
-                </div>
-            ";
-        }
-        $emailBody .= "
-                <p style='text-align: right; margin-top: 10px;'><strong>Food Total: ₱" . number_format($foodTotal, 2) . "</strong></p>
-        ";
-    }
-    
-    $emailBody .= "
-                <div style='text-align: center; margin: 30px 0;'>
-                    <a href='$ticketUrl' class='btn'>View Your Ticket & QR Code</a>
-                </div>
-                
-                <p><strong>Important Reminders:</strong></p>
-                <ul>
-                    <li>Please arrive at least 15 minutes before the show time</li>
-                    <li>Present your QR code at the cinema entrance</li>
-                    <li>Keep this email as your booking confirmation</li>
-    ";
-    
-    if (!empty($foodItems)) {
-        $emailBody .= "<li>Your food orders will be ready for pickup at the designated stalls</li>";
-    }
-    
-    $emailBody .= "
-                </ul>
-                
-                <div class='footer'>
-                    <p>If you have any questions, please contact our support team.</p>
-                    <p>Thank you for choosing Ticketix!</p>
-                </div>
-            </div>
-        </div>
+    <body style='margin:0;padding:0;background:#f4f6fb;font-family:Arial,Helvetica,sans-serif;'>
+        <!-- Page background -->
+        <table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='background:#f4f6fb;'>
+            <tr>
+                <td align='center' style='padding:30px 10px;'>
+
+                    <!-- Card container -->
+                    <table role='presentation' width='580' cellpadding='0' cellspacing='0' style='background:#ffffff;border:1px solid #d0d8f0;border-radius:8px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06);'>
+
+                        <!-- ══ HEADER BAND ══ -->
+                        <tr>
+                            <td style='background:#0f1a2e;padding:18px 24px;'>
+                                <table role='presentation' width='100%' cellpadding='0' cellspacing='0'>
+                                    <tr>
+                                        <td style='color:#ffffff;font-size:20px;font-weight:700;letter-spacing:1px;'>TICKETIX</td>
+                                        <td style='text-align:right;'>
+                                            <span style='color:#b4c3e6;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;display:block;'>OFFICIAL RECEIPT</span>
+                                            <span style='color:#ffffff;font-size:12px;font-weight:700;margin-top:2px;display:block;'>$ticketNumber</span>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td colspan='2' style='padding-top:4px;'>
+                                            <span style='color:#96aad2;font-size:12px;'>Online Booking Receipt</span>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+
+                        <!-- ══ BLUE ACCENT STRIP ══ -->
+                        <tr>
+                            <td style='background:#3b5fc0;height:4px;font-size:0;line-height:0;'>&nbsp;</td>
+                        </tr>
+
+                        <!-- ══ BOOKING CONFIRMED BADGE ══ -->
+                        <tr>
+                            <td align='center' style='padding:22px 24px 6px;'>
+                                <table role='presentation' cellpadding='0' cellspacing='0'>
+                                    <tr>
+                                        <td style='background:#228b50;border-radius:4px;padding:8px 32px;'>
+                                            <span style='color:#ffffff;font-size:13px;font-weight:700;letter-spacing:1px;'>&#10003; BOOKING CONFIRMED</span>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td align='center' style='padding:6px 24px 16px;'>
+                                <span style='color:#788296;font-size:11px;'>Issued: $issuedDate</span>
+                            </td>
+                        </tr>
+
+                        <!-- ══ GREETING ══ -->
+                        <tr>
+                            <td style='padding:0 24px 16px;text-align:center;'>
+                                <span style='font-size:14px;color:#111827;'>Thank you for your booking, <strong>$userName</strong>!</span>
+                            </td>
+                        </tr>
+
+                        <!-- ══ DASHED DIVIDER ══ -->
+                        <tr>
+                            <td style='padding:0 20px;'>
+                                <table role='presentation' width='100%' cellpadding='0' cellspacing='0'>
+                                    <tr><td style='border-top:2px dashed #b4c3e6;font-size:0;line-height:0;height:1px;'>&nbsp;</td></tr>
+                                </table>
+                            </td>
+                        </tr>
+
+                        <!-- ══ DETAIL ROWS ══ -->
+                        <tr>
+                            <td style='padding:14px 20px 0;'>
+                                <table role='presentation' width='100%' cellpadding='0' cellspacing='0' style='border:1px solid #d0d8f0;border-radius:6px;overflow:hidden;'>
+                                    <!-- Booking Type -->
+                                    <tr>
+                                        <td style='padding:8px 14px;font-size:13px;color:#6b7280;background:#ffffff;border-bottom:1px solid #d0d8f0;width:40%;'>Booking Type</td>
+                                        <td style='padding:8px 14px;font-size:13px;font-weight:700;color:#111827;background:#ffffff;border-bottom:1px solid #d0d8f0;text-align:right;'>Client (Online)</td>
+                                    </tr>
+                                    <!-- Movie -->
+                                    <tr>
+                                        <td style='padding:8px 14px;font-size:13px;color:#6b7280;background:#f9fafb;border-bottom:1px solid #d0d8f0;'>Movie</td>
+                                        <td style='padding:8px 14px;font-size:13px;font-weight:700;color:#111827;background:#f9fafb;border-bottom:1px solid #d0d8f0;text-align:right;'>$movieTitle</td>
+                                    </tr>
+                                    <!-- Branch / Cinema -->
+                                    <tr>
+                                        <td style='padding:8px 14px;font-size:13px;color:#6b7280;background:#ffffff;border-bottom:1px solid #d0d8f0;'>Branch / Cinema</td>
+                                        <td style='padding:8px 14px;font-size:13px;font-weight:700;color:#111827;background:#ffffff;border-bottom:1px solid #d0d8f0;text-align:right;'>$branchName</td>
+                                    </tr>
+                                    <!-- Date & Time -->
+                                    <tr>
+                                        <td style='padding:8px 14px;font-size:13px;color:#6b7280;background:#f9fafb;border-bottom:1px solid #d0d8f0;'>Date &amp; Time</td>
+                                        <td style='padding:8px 14px;font-size:13px;font-weight:700;color:#111827;background:#f9fafb;border-bottom:1px solid #d0d8f0;text-align:right;'>$showDate at $showTime</td>
+                                    </tr>
+                                    <!-- Seats -->
+                                    <tr>
+                                        <td style='padding:8px 14px;font-size:13px;color:#6b7280;background:#ffffff;border-bottom:1px solid #d0d8f0;'>Seats ($seatCount)</td>
+                                        <td style='padding:8px 14px;font-size:13px;font-weight:700;color:#111827;background:#ffffff;border-bottom:1px solid #d0d8f0;text-align:right;'>$seatsList</td>
+                                    </tr>
+
+                                    <!-- Food rows (if any) -->
+                                    $foodRowsHtml
+
+                                    <!-- Payment Method -->
+                                    <tr>
+                                        <td style='padding:8px 14px;font-size:13px;color:#6b7280;background:#f9fafb;border-bottom:1px solid #d0d8f0;'>Payment Method</td>
+                                        <td style='padding:8px 14px;font-size:13px;font-weight:700;color:#111827;background:#f9fafb;border-bottom:1px solid #d0d8f0;text-align:right;'>$paymentType</td>
+                                    </tr>
+                                    $refRowHtml
+                                    <!-- Payment Status -->
+                                    <tr>
+                                        <td style='padding:8px 14px;font-size:13px;color:#6b7280;background:#ffffff;border-bottom:1px solid #d0d8f0;'>Payment Status</td>
+                                        <td style='padding:8px 14px;background:#ffffff;border-bottom:1px solid #d0d8f0;text-align:right;'>
+                                            <span style='display:inline-block;background:#228b50;color:#ffffff;font-size:10px;font-weight:700;padding:3px 12px;border-radius:3px;text-transform:uppercase;'>PAID</span>
+                                        </td>
+                                    </tr>
+                                    <!-- Total Amount -->
+                                    <tr>
+                                        <td style='padding:10px 14px;font-size:14px;font-weight:700;color:#3b5fc0;background:#e6ecff;'>Total Amount Paid</td>
+                                        <td style='padding:10px 14px;font-size:16px;font-weight:800;color:#0f1a2e;background:#e6ecff;text-align:right;'>&#8369;$amountPaidFormatted</td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+
+                        <!-- ══ DASHED DIVIDER ══ -->
+                        <tr>
+                            <td style='padding:18px 20px 0;'>
+                                <table role='presentation' width='100%' cellpadding='0' cellspacing='0'>
+                                    <tr><td style='border-top:2px dashed #b4c3e6;font-size:0;line-height:0;height:1px;'>&nbsp;</td></tr>
+                                </table>
+                            </td>
+                        </tr>
+
+                        <!-- ══ QR CODE SECTION ══ -->
+                        <tr>
+                            <td align='center' style='padding:14px 24px 4px;'>
+                                <span style='font-size:10px;font-weight:700;color:#788296;text-transform:uppercase;letter-spacing:0.8px;'>SCAN QR CODE AT CINEMA ENTRANCE</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td align='center' style='padding:10px 24px;'>
+                                <img src='$qrUrl' alt='QR Code' width='160' height='160' style='display:block;border:4px solid #d0d8f0;border-radius:8px;'>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td align='center' style='padding:0 24px 8px;'>
+                                <span style='font-size:11px;font-weight:700;color:#3b5fc0;font-family:monospace;word-break:break-all;'>$qrData</span>
+                            </td>
+                        </tr>
+
+                        <!-- ══ VIEW TICKET BUTTON ══ -->
+                        <tr>
+                            <td align='center' style='padding:10px 24px 18px;'>
+                                <table role='presentation' cellpadding='0' cellspacing='0'>
+                                    <tr>
+                                        <td style='background:#3b5fc0;border-radius:6px;'>
+                                            <a href='$ticketUrl' style='display:inline-block;padding:12px 36px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:0.5px;'>View Your Ticket Online &rarr;</a>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+
+                        <!-- ══ DASHED DIVIDER ══ -->
+                        <tr>
+                            <td style='padding:0 20px;'>
+                                <table role='presentation' width='100%' cellpadding='0' cellspacing='0'>
+                                    <tr><td style='border-top:2px dashed #b4c3e6;font-size:0;line-height:0;height:1px;'>&nbsp;</td></tr>
+                                </table>
+                            </td>
+                        </tr>
+
+                        <!-- ══ IMPORTANT REMINDERS ══ -->
+                        <tr>
+                            <td style='padding:16px 24px 6px;'>
+                                <span style='font-size:13px;font-weight:700;color:#111827;'>Important Reminders:</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td style='padding:0 24px 16px;'>
+                                <ul style='margin:8px 0 0 0;padding-left:18px;color:#6b7280;font-size:12px;line-height:1.8;'>
+                                    <li style='margin-bottom:6px;'>Please arrive at least 15 minutes before the show time</li>
+                                    <li style='margin-bottom:6px;'>Present your QR code at the cinema entrance</li>
+                                    <li style='margin-bottom:6px;'>Keep this email as your booking confirmation</li>
+                                    $reminderFood
+                                </ul>
+                            </td>
+                        </tr>
+
+                        <!-- ══ FOOTER ══ -->
+                        <tr>
+                            <td style='padding:14px 24px;text-align:center;background:#f4f6fb;border-top:1px solid #d0d8f0;'>
+                                <span style='font-size:11px;font-style:italic;color:#96a0b8;line-height:1.6;'>
+                                    This is the official record of your booking at Ticketix Cinema.<br>
+                                    Present the QR code or ticket number at the cinema entrance.
+                                </span>
+                            </td>
+                        </tr>
+
+                        <!-- ══ BOTTOM ACCENT STRIP ══ -->
+                        <tr>
+                            <td style='background:#3b5fc0;height:4px;font-size:0;line-height:0;'>&nbsp;</td>
+                        </tr>
+                    </table>
+
+                    <!-- Sub-footer -->
+                    <table role='presentation' width='580' cellpadding='0' cellspacing='0'>
+                        <tr>
+                            <td align='center' style='padding:16px 24px;'>
+                                <span style='font-size:11px;color:#96a0b8;'>If you have any questions, please contact our support team.</span><br>
+                                <span style='font-size:11px;color:#96a0b8;'>Thank you for choosing <strong style=\"color:#3b5fc0;\">Ticketix</strong>!</span>
+                            </td>
+                        </tr>
+                    </table>
+
+                </td>
+            </tr>
+        </table>
     </body>
     </html>
     ";

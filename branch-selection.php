@@ -1,6 +1,7 @@
 <?php
 // Single branch mode — skip branch selection, go straight to cinema types
-header("Location: select-movie-branch.php");
+$qs = $_SERVER['QUERY_STRING'] ? '?' . $_SERVER['QUERY_STRING'] : '';
+header("Location: select-movie-branch.php" . $qs);
 exit();
 
 // Detect flow and selected movie (if any)

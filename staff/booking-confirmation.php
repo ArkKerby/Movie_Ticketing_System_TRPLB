@@ -11,17 +11,16 @@ $paymentMethod = $_SESSION['staff_last_payment'] ?? 'cash';
 
 // Fetch ticket
 $q = "SELECT t.ticket_id, t.ticket_number, t.e_ticket_code, t.ticket_status,
+             t.payment_type, t.amount_paid, t.reference_number,
              r.reservation_id, r.ticket_amount, r.sum_price, r.food_total,
              m.title, m.image_poster,
              ms.show_date, ms.show_hour,
-             b.branch_name,
-             p.payment_type, p.amount_paid, p.reference_number
+             b.branch_name
       FROM TICKET t
       JOIN RESERVE r ON t.reserve_id = r.reservation_id
       JOIN MOVIE_SCHEDULE ms ON r.schedule_id = ms.schedule_id
       JOIN MOVIE m ON ms.movie_show_id = m.movie_show_id
       LEFT JOIN BRANCH b ON ms.branch_id = b.branch_id
-      JOIN PAYMENT p ON t.payment_id = p.payment_id
       WHERE t.ticket_id = ?";
 $stmt = $conn->prepare($q);
 $stmt->bind_param("i", $ticketId);

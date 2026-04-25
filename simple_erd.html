@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticketix - Simple ERD</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0a1a;
+            color: #e0e0e0;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .header {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 28px;
+            background: rgba(10, 10, 26, 0.92);
+            backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a78bfa, #818cf8, #6366f1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header .subtitle {
+            font-size: 11px;
+            color: rgba(255,255,255,0.35);
+            margin-top: 1px;
+        }
+
+        .legend {
+            display: flex;
+            align-items: center;
+            gap: 22px;
+            font-size: 11px;
+            color: rgba(255,255,255,0.5);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .legend-rect {
+            width: 18px;
+            height: 12px;
+            border-radius: 3px;
+            border: 1.5px solid rgba(129, 140, 248, 0.5);
+            background: rgba(30, 30, 60, 0.8);
+        }
+
+        .legend-diamond {
+            width: 14px;
+            height: 14px;
+            background: rgba(244, 114, 182, 0.2);
+            border: 1.5px solid rgba(244, 114, 182, 0.5);
+            transform: rotate(45deg);
+        }
+
+        .grid-bg {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-image:
+                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.02) 1px, transparent 0);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .canvas-container {
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+            position: relative;
+            overflow: hidden;
+        }
+        .canvas-container:active { cursor: grabbing; }
+
+        .canvas {
+            position: absolute;
+            transform-origin: 0 0;
+        }
+
+        .lines-svg {
+            position: absolute;
+            top: 0; left: 0;
+            width: 6000px;
+            height: 4000px;
+            pointer-events: none;
+        }
+
+        .rel-line {
+            stroke: rgba(129, 140, 248, 0.28);
+            stroke-width: 1.8;
+            fill: none;
+        }
+
+        .card-text {
+            font-family: 'Inter', sans-serif;
+            font-size: 11px;
+            font-weight: 700;
+            fill: rgba(167, 139, 250, 0.9);
+        }
+
+        .card-bg {
+            fill: rgba(10, 10, 26, 0.95);
+            rx: 4;
+        }
+
+        /* Entity boxes */
+        .entity {
+            position: absolute;
+            background: linear-gradient(145deg, rgba(30, 30, 60, 0.95), rgba(18, 18, 40, 0.98));
+            border: 1.5px solid rgba(129, 140, 248, 0.22);
+            border-radius: 8px;
+            cursor: move;
+            user-select: none;
+            transition: box-shadow 0.3s, border-color 0.3s;
+            overflow: hidden;
+            white-space: nowrap;
+            z-index: 2;
+        }
+
+        .entity:hover {
+            border-color: rgba(129, 140, 248, 0.6);
+            box-shadow: 0 0 24px rgba(99, 102, 241, 0.2), 0 8px 32px rgba(0,0,0,0.35);
+            z-index: 10;
+        }
+
+        .entity.dragging {
+            z-index: 50;
+            box-shadow: 0 0 35px rgba(99, 102, 241, 0.4), 0 16px 48px rgba(0,0,0,0.5);
+            border-color: rgba(129, 140, 248, 0.65);
+            transition: none;
+        }
+
+        .entity.highlighted {
+            border-color: rgba(129, 140, 248, 0.7);
+            box-shadow: 0 0 28px rgba(99, 102, 241, 0.3);
+        }
+
+        .entity-header {
+            padding: 10px 18px;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(129, 140, 248, 0.05));
+            text-align: center;
+        }
+
+        .entity-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: #c4b5fd;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+        }
+
+        /* Diamond (relationship) */
+        .diamond {
+            position: absolute;
+            cursor: default;
+            user-select: none;
+            z-index: 1;
+        }
+
+        .diamond-shape {
+            width: 100%;
+            height: 100%;
+        }
+
+        .diamond-poly {
+            fill: rgba(244, 114, 182, 0.08);
+            stroke: rgba(244, 114, 182, 0.35);
+            stroke-width: 1.5;
+            transition: fill 0.3s, stroke 0.3s;
+        }
+
+        .diamond:hover .diamond-poly {
+            fill: rgba(244, 114, 182, 0.15);
+            stroke: rgba(244, 114, 182, 0.6);
+        }
+
+        .diamond-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 9px;
+            font-weight: 600;
+            color: rgba(244, 114, 182, 0.8);
+            text-transform: lowercase;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        /* Controls */
+        .zoom-controls {
+            position: fixed;
+            bottom: 16px;
+            right: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            z-index: 100;
+        }
+
+        .zoom-btn {
+            width: 34px;
+            height: 34px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(20, 20, 45, 0.9);
+            backdrop-filter: blur(12px);
+            color: rgba(255,255,255,0.7);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .zoom-btn:hover {
+            background: rgba(99, 102, 241, 0.2);
+            border-color: rgba(129, 140, 248, 0.4);
+            color: #fff;
+        }
+
+        .zoom-level {
+            text-align: center;
+            font-size: 10px;
+            color: rgba(255,255,255,0.3);
+            padding: 2px;
+        }
+
+        .info-tooltip {
+            position: fixed;
+            bottom: 12px;
+            left: 12px;
+            padding: 5px 10px;
+            background: rgba(20, 20, 45, 0.85);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 6px;
+            font-size: 10px;
+            color: rgba(255,255,255,0.3);
+            z-index: 100;
+        }
+
+        .fit-btn {
+            position: fixed;
+            top: 56px;
+            left: 12px;
+            padding: 5px 12px;
+            background: rgba(99, 102, 241, 0.12);
+            border: 1px solid rgba(129, 140, 248, 0.2);
+            border-radius: 6px;
+            color: #a78bfa;
+            font-family: 'Inter', sans-serif;
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            z-index: 100;
+            transition: all 0.2s;
+        }
+        .fit-btn:hover {
+            background: rgba(99, 102, 241, 0.25);
+            border-color: rgba(129, 140, 248, 0.5);
+        }
+
+        .minimap {
+            position: fixed;
+            top: 56px;
+            right: 12px;
+            width: 180px;
+            height: 100px;
+            background: rgba(12, 12, 30, 0.92);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            overflow: hidden;
+            z-index: 100;
+        }
+
+        .minimap-viewport {
+            position: absolute;
+            border: 1.5px solid rgba(129, 140, 248, 0.5);
+            background: rgba(129, 140, 248, 0.06);
+            border-radius: 2px;
+            pointer-events: none;
+        }
+
+        .minimap-entity {
+            position: absolute;
+            background: rgba(129, 140, 248, 0.5);
+            border-radius: 1px;
+        }
+
+        .minimap-diamond {
+            position: absolute;
+            background: rgba(244, 114, 182, 0.4);
+            border-radius: 1px;
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-bg"></div>
+
+    <div class="header">
+        <div>
+            <h1>Ticketix — Simple ERD</h1>
+            <div class="subtitle">Chen Notation • 15 Entities • 15 Relationships</div>
+        </div>
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-rect"></div>
+                <span>Entity</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-diamond"></div>
+                <span>Relationship</span>
+            </div>
+            <div class="legend-item">
+                <span style="font-weight:700;color:rgba(167,139,250,0.8);">1</span>
+                <span>One</span>
+            </div>
+            <div class="legend-item">
+                <span style="font-weight:700;color:rgba(167,139,250,0.8);">M</span>
+                <span>Many</span>
+            </div>
+        </div>
+    </div>
+
+    <button class="fit-btn" id="fitBtn">⊞ Fit All</button>
+
+    <div class="canvas-container" id="canvasContainer">
+        <div class="canvas" id="canvas">
+            <svg class="lines-svg" id="linesSvg"></svg>
+        </div>
+    </div>
+
+    <div class="zoom-controls">
+        <button class="zoom-btn" id="zoomIn">+</button>
+        <div class="zoom-level" id="zoomLevel">100%</div>
+        <button class="zoom-btn" id="zoomOut">−</button>
+        <button class="zoom-btn" id="zoomReset" style="font-size:12px;">⟲</button>
+    </div>
+
+    <div class="info-tooltip">Drag entities • Scroll to zoom • Drag background to pan</div>
+
+    <div class="minimap" id="minimap"></div>
+
+    <script>
+    // ═══════════════════════════════════════════
+    // DATA
+    // ═══════════════════════════════════════════
+
+    const entities = [
+        // Row 1
+        { id: 'branch',             name: 'BRANCH',                  x: 160,  y: 30   },
+        { id: 'admin_notification', name: 'ADMIN_NOTIFICATION',      x: 820,  y: 30   },
+
+        // Row 2
+        { id: 'movie',              name: 'MOVIE',                   x: 20,   y: 220  },
+        { id: 'cinema_number',      name: 'CINEMA_NUMBER',           x: 340,  y: 220  },
+        { id: 'user_account',       name: 'USER_ACCOUNT',            x: 660,  y: 220  },
+        { id: 'user_payment',       name: 'USER_PAYMENT_METHODS',    x: 1060, y: 220  },
+
+        // Row 3
+        { id: 'movie_schedule',     name: 'MOVIE_SCHEDULE',          x: 20,   y: 460  },
+        { id: 'cinema_assignment',  name: 'CINEMA_MOVIE_ASSIGNMENT', x: 340,  y: 460  },
+        { id: 'reserve',            name: 'RESERVE',                 x: 660,  y: 460  },
+        { id: 'email_verification', name: 'EMAIL_VERIFICATION',      x: 1000, y: 460  },
+        { id: 'discount_apps',      name: 'DISCOUNT_APPLICATIONS',   x: 1300, y: 460  },
+
+        // Row 4
+        { id: 'ticket',             name: 'TICKET',                  x: 400,  y: 700  },
+        { id: 'reserve_seat',       name: 'RESERVE_SEAT',            x: 800,  y: 700  },
+
+        // Row 5
+        { id: 'ticket_food',        name: 'TICKET_FOOD',             x: 280,  y: 920  },
+        { id: 'food',               name: 'FOOD',                    x: 600,  y: 920  },
+    ];
+
+    const relationships = [
+        { id: 'r1',  from: 'branch',        to: 'movie',              fromCard: '1', toCard: 'M', label: 'has'          },
+        { id: 'r2',  from: 'branch',        to: 'cinema_number',      fromCard: '1', toCard: 'M', label: 'has'          },
+        { id: 'r3',  from: 'branch',        to: 'movie_schedule',     fromCard: '1', toCard: 'M', label: 'has'          },
+        { id: 'r4',  from: 'movie',         to: 'movie_schedule',     fromCard: '1', toCard: 'M', label: 'scheduled in' },
+        { id: 'r5',  from: 'cinema_number', to: 'cinema_assignment',  fromCard: '1', toCard: 'M', label: 'assigned'     },
+        { id: 'r6',  from: 'movie_schedule',to: 'cinema_assignment',  fromCard: '1', toCard: 'M', label: 'assigned'     },
+        { id: 'r7',  from: 'user_account',  to: 'user_payment',       fromCard: '1', toCard: 'M', label: 'owns'         },
+        { id: 'r8',  from: 'user_account',  to: 'email_verification', fromCard: '1', toCard: 'M', label: 'verifies'     },
+        { id: 'r9',  from: 'user_account',  to: 'reserve',            fromCard: '1', toCard: 'M', label: 'makes'        },
+        { id: 'r10', from: 'user_account',  to: 'discount_apps',      fromCard: '1', toCard: 'M', label: 'applies'      },
+        { id: 'r11', from: 'movie_schedule',to: 'reserve',            fromCard: '1', toCard: 'M', label: 'booked for'   },
+        { id: 'r12', from: 'reserve',       to: 'ticket',             fromCard: '1', toCard: 'M', label: 'generates'    },
+        { id: 'r13', from: 'reserve',       to: 'reserve_seat',       fromCard: '1', toCard: 'M', label: 'assigns'      },
+        { id: 'r14', from: 'ticket',        to: 'ticket_food',        fromCard: '1', toCard: 'M', label: 'includes'     },
+        { id: 'r15', from: 'food',          to: 'ticket_food',        fromCard: '1', toCard: 'M', label: 'ordered in'   },
+    ];
+
+    // ═══════════════════════════════════════════
+    // GLOBALS
+    // ═══════════════════════════════════════════
+
+    const canvas = document.getElementById('canvas');
+    const svgEl = document.getElementById('linesSvg');
+    const container = document.getElementById('canvasContainer');
+    const HEADER_H = 46;
+    const DIAMOND_W = 90;
+    const DIAMOND_H = 52;
+
+    let scale = 1, panX = 0, panY = 0;
+    let isPanning = false, panStartX, panStartY;
+    let dragEntity = null, dragOffsetX, dragOffsetY;
+
+    const entityEls = {};
+    const diamondEls = {};
+
+    // ═══════════════════════════════════════════
+    // CREATE ENTITY ELEMENTS
+    // ═══════════════════════════════════════════
+
+    entities.forEach(e => {
+        const div = document.createElement('div');
+        div.className = 'entity';
+        div.id = `entity-${e.id}`;
+        div.style.left = e.x + 'px';
+        div.style.top = e.y + 'px';
+        div.innerHTML = `<div class="entity-header"><div class="entity-name">${e.name}</div></div>`;
+        canvas.appendChild(div);
+        entityEls[e.id] = { el: div, data: e };
+
+        div.addEventListener('mousedown', (ev) => {
+            if (ev.button !== 0) return;
+            ev.stopPropagation();
+            dragEntity = e;
+            div.classList.add('dragging');
+            dragOffsetX = (ev.clientX - panX) / scale - e.x;
+            dragOffsetY = (ev.clientY - panY - HEADER_H) / scale - e.y;
+        });
+
+        div.addEventListener('mouseenter', () => {
+            relationships.forEach(r => {
+                if (r.from === e.id) {
+                    entityEls[r.to]?.el.classList.add('highlighted');
+                    diamondEls[r.id]?.el.querySelector('.diamond-poly')?.setAttribute('stroke', 'rgba(244,114,182,0.7)');
+                }
+                if (r.to === e.id) {
+                    entityEls[r.from]?.el.classList.add('highlighted');
+                    diamondEls[r.id]?.el.querySelector('.diamond-poly')?.setAttribute('stroke', 'rgba(244,114,182,0.7)');
+                }
+            });
+            div.classList.add('highlighted');
+        });
+
+        div.addEventListener('mouseleave', () => {
+            entities.forEach(ent => entityEls[ent.id]?.el.classList.remove('highlighted'));
+            relationships.forEach(r => {
+                diamondEls[r.id]?.el.querySelector('.diamond-poly')?.setAttribute('stroke', 'rgba(244,114,182,0.35)');
+            });
+        });
+    });
+
+    // ═══════════════════════════════════════════
+    // CREATE DIAMOND ELEMENTS
+    // ═══════════════════════════════════════════
+
+    relationships.forEach(rel => {
+        const div = document.createElement('div');
+        div.className = 'diamond';
+        div.style.width = DIAMOND_W + 'px';
+        div.style.height = DIAMOND_H + 'px';
+
+        const svgDiamond = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svgDiamond.setAttribute('class', 'diamond-shape');
+        svgDiamond.setAttribute('viewBox', `0 0 ${DIAMOND_W} ${DIAMOND_H}`);
+
+        const hw = DIAMOND_W / 2;
+        const hh = DIAMOND_H / 2;
+        const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        poly.setAttribute('points', `${hw},1 ${DIAMOND_W - 1},${hh} ${hw},${DIAMOND_H - 1} 1,${hh}`);
+        poly.setAttribute('class', 'diamond-poly');
+        svgDiamond.appendChild(poly);
+
+        div.appendChild(svgDiamond);
+
+        const label = document.createElement('div');
+        label.className = 'diamond-label';
+        label.textContent = rel.label;
+        div.appendChild(label);
+
+        canvas.appendChild(div);
+        diamondEls[rel.id] = { el: div, data: rel };
+    });
+
+    // ═══════════════════════════════════════════
+    // INTERACTION
+    // ═══════════════════════════════════════════
+
+    document.addEventListener('mousemove', (ev) => {
+        if (dragEntity) {
+            const nx = (ev.clientX - panX) / scale - dragOffsetX;
+            const ny = (ev.clientY - panY - HEADER_H) / scale - dragOffsetY;
+            dragEntity.x = nx;
+            dragEntity.y = ny;
+            entityEls[dragEntity.id].el.style.left = nx + 'px';
+            entityEls[dragEntity.id].el.style.top = ny + 'px';
+            positionDiamonds();
+            drawLines();
+            updateMinimap();
+        } else if (isPanning) {
+            panX += ev.clientX - panStartX;
+            panY += ev.clientY - panStartY;
+            panStartX = ev.clientX;
+            panStartY = ev.clientY;
+            applyTransform();
+            updateMinimap();
+        }
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (dragEntity) {
+            entityEls[dragEntity.id].el.classList.remove('dragging');
+            dragEntity = null;
+        }
+        isPanning = false;
+        container.style.cursor = 'grab';
+    });
+
+    container.addEventListener('mousedown', (ev) => {
+        if (ev.target === container || ev.target === canvas || ev.target === svgEl) {
+            isPanning = true;
+            panStartX = ev.clientX;
+            panStartY = ev.clientY;
+            container.style.cursor = 'grabbing';
+        }
+    });
+
+    container.addEventListener('wheel', (ev) => {
+        ev.preventDefault();
+        const delta = ev.deltaY > 0 ? -0.07 : 0.07;
+        const newScale = Math.max(0.2, Math.min(3, scale + delta));
+        const rect = container.getBoundingClientRect();
+        const cx = ev.clientX - rect.left;
+        const cy = ev.clientY - rect.top;
+        panX = cx - (cx - panX) * (newScale / scale);
+        panY = cy - (cy - panY) * (newScale / scale);
+        scale = newScale;
+        applyTransform();
+        updateMinimap();
+    }, { passive: false });
+
+    document.getElementById('zoomIn').onclick = () => { scale = Math.min(3, scale + 0.15); applyTransform(); updateMinimap(); };
+    document.getElementById('zoomOut').onclick = () => { scale = Math.max(0.2, scale - 0.15); applyTransform(); updateMinimap(); };
+    document.getElementById('zoomReset').onclick = fitAll;
+    document.getElementById('fitBtn').onclick = fitAll;
+
+    function applyTransform() {
+        canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+        document.getElementById('zoomLevel').textContent = Math.round(scale * 100) + '%';
+    }
+
+    // ═══════════════════════════════════════════
+    // FIT ALL
+    // ═══════════════════════════════════════════
+
+    function fitAll() {
+        const pad = 40;
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+        entities.forEach(e => {
+            const el = entityEls[e.id].el;
+            minX = Math.min(minX, e.x);
+            minY = Math.min(minY, e.y);
+            maxX = Math.max(maxX, e.x + el.offsetWidth);
+            maxY = Math.max(maxY, e.y + el.offsetHeight);
+        });
+
+        // Include diamonds
+        relationships.forEach(rel => {
+            const d = getDiamondPos(rel);
+            minX = Math.min(minX, d.x);
+            minY = Math.min(minY, d.y);
+            maxX = Math.max(maxX, d.x + DIAMOND_W);
+            maxY = Math.max(maxY, d.y + DIAMOND_H);
+        });
+
+        const worldW = maxX - minX + pad * 2;
+        const worldH = maxY - minY + pad * 2;
+        const rect = container.getBoundingClientRect();
+        const vw = rect.width;
+        const vh = rect.height - HEADER_H;
+
+        scale = Math.min(vw / worldW, vh / worldH, 1.1);
+        panX = (vw - worldW * scale) / 2 - minX * scale + pad * scale;
+        panY = HEADER_H + (vh - worldH * scale) / 2 - minY * scale + pad * scale;
+
+        applyTransform();
+        updateMinimap();
+    }
+
+    // ═══════════════════════════════════════════
+    // POSITION DIAMONDS AT MIDPOINT
+    // ═══════════════════════════════════════════
+
+    function getEntityCenter(id) {
+        const el = entityEls[id].el;
+        const d = entityEls[id].data;
+        return {
+            cx: d.x + el.offsetWidth / 2,
+            cy: d.y + el.offsetHeight / 2,
+            x: d.x, y: d.y,
+            w: el.offsetWidth, h: el.offsetHeight
+        };
+    }
+
+    function getDiamondPos(rel) {
+        const f = getEntityCenter(rel.from);
+        const t = getEntityCenter(rel.to);
+        return {
+            x: (f.cx + t.cx) / 2 - DIAMOND_W / 2,
+            y: (f.cy + t.cy) / 2 - DIAMOND_H / 2
+        };
+    }
+
+    function positionDiamonds() {
+        relationships.forEach(rel => {
+            const pos = getDiamondPos(rel);
+            const el = diamondEls[rel.id].el;
+            el.style.left = pos.x + 'px';
+            el.style.top = pos.y + 'px';
+        });
+    }
+
+    // ═══════════════════════════════════════════
+    // DRAW LINES (Entity → Diamond → Entity)
+    // ═══════════════════════════════════════════
+
+    function getEdgePoint(center, targetX, targetY) {
+        // Get the point on the entity edge facing toward target
+        const dx = targetX - center.cx;
+        const dy = targetY - center.cy;
+        const hw = center.w / 2;
+        const hh = center.h / 2;
+
+        if (dx === 0 && dy === 0) return { x: center.cx, y: center.cy };
+
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+
+        let ex, ey;
+        if (absDx / hw > absDy / hh) {
+            // Hit left or right edge
+            ex = center.cx + (dx > 0 ? hw : -hw);
+            ey = center.cy + dy * (hw / absDx);
+        } else {
+            // Hit top or bottom edge
+            ey = center.cy + (dy > 0 ? hh : -hh);
+            ex = center.cx + dx * (hh / absDy);
+        }
+        return { x: ex, y: ey };
+    }
+
+    function getDiamondEdge(dcx, dcy, targetX, targetY) {
+        // Diamond edge point facing target
+        const dx = targetX - dcx;
+        const dy = targetY - dcy;
+        const hw = DIAMOND_W / 2;
+        const hh = DIAMOND_H / 2;
+
+        if (dx === 0 && dy === 0) return { x: dcx, y: dcy };
+
+        // Diamond parameterization: |x/hw| + |y/hh| = 1
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+        const t = hw * hh / (absDy * hw + absDx * hh);
+
+        return {
+            x: dcx + dx * t,
+            y: dcy + dy * t
+        };
+    }
+
+    function drawLines() {
+        svgEl.innerHTML = '';
+
+        relationships.forEach(rel => {
+            const f = getEntityCenter(rel.from);
+            const t = getEntityCenter(rel.to);
+            const dpos = getDiamondPos(rel);
+            const dcx = dpos.x + DIAMOND_W / 2;
+            const dcy = dpos.y + DIAMOND_H / 2;
+
+            // Line 1: Entity "from" → Diamond
+            const fromEdge = getEdgePoint(f, dcx, dcy);
+            const dEdge1 = getDiamondEdge(dcx, dcy, f.cx, f.cy);
+
+            // Line 2: Diamond → Entity "to"
+            const dEdge2 = getDiamondEdge(dcx, dcy, t.cx, t.cy);
+            const toEdge = getEdgePoint(t, dcx, dcy);
+
+            // Draw line 1
+            drawSingleLine(fromEdge.x, fromEdge.y, dEdge1.x, dEdge1.y);
+            // Draw line 2
+            drawSingleLine(dEdge2.x, dEdge2.y, toEdge.x, toEdge.y);
+
+            // Cardinality near "from" entity
+            const c1x = fromEdge.x + (dEdge1.x - fromEdge.x) * 0.2;
+            const c1y = fromEdge.y + (dEdge1.y - fromEdge.y) * 0.2;
+            addCard(c1x, c1y, rel.fromCard);
+
+            // Cardinality near "to" entity
+            const c2x = toEdge.x + (dEdge2.x - toEdge.x) * 0.2;
+            const c2y = toEdge.y + (dEdge2.y - toEdge.y) * 0.2;
+            addCard(c2x, c2y, rel.toCard);
+        });
+    }
+
+    function drawSingleLine(x1, y1, x2, y2) {
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x1);
+        line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2);
+        line.setAttribute('y2', y2);
+        line.setAttribute('class', 'rel-line');
+        svgEl.appendChild(line);
+    }
+
+    function addCard(x, y, text) {
+        const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        bg.setAttribute('x', x - 9);
+        bg.setAttribute('y', y - 16);
+        bg.setAttribute('width', 18);
+        bg.setAttribute('height', 17);
+        bg.setAttribute('class', 'card-bg');
+        svgEl.appendChild(bg);
+
+        const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        txt.setAttribute('x', x);
+        txt.setAttribute('y', y - 4);
+        txt.setAttribute('text-anchor', 'middle');
+        txt.setAttribute('class', 'card-text');
+        txt.textContent = text;
+        svgEl.appendChild(txt);
+    }
+
+    // ═══════════════════════════════════════════
+    // MINIMAP
+    // ═══════════════════════════════════════════
+
+    const minimapEl = document.getElementById('minimap');
+
+    function updateMinimap() {
+        minimapEl.innerHTML = '';
+        const mmW = 180, mmH = 100, pad = 30;
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        entities.forEach(e => {
+            const el = entityEls[e.id].el;
+            minX = Math.min(minX, e.x);
+            minY = Math.min(minY, e.y);
+            maxX = Math.max(maxX, e.x + el.offsetWidth);
+            maxY = Math.max(maxY, e.y + el.offsetHeight);
+        });
+        relationships.forEach(rel => {
+            const d = getDiamondPos(rel);
+            minX = Math.min(minX, d.x);
+            minY = Math.min(minY, d.y);
+            maxX = Math.max(maxX, d.x + DIAMOND_W);
+            maxY = Math.max(maxY, d.y + DIAMOND_H);
+        });
+
+        minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+        const wW = maxX - minX, wH = maxY - minY;
+        const s = Math.min(mmW / wW, mmH / wH);
+        const ox = (mmW - wW * s) / 2;
+        const oy = (mmH - wH * s) / 2;
+
+        entities.forEach(e => {
+            const el = entityEls[e.id].el;
+            const dot = document.createElement('div');
+            dot.className = 'minimap-entity';
+            dot.style.left = (ox + (e.x - minX) * s) + 'px';
+            dot.style.top = (oy + (e.y - minY) * s) + 'px';
+            dot.style.width = Math.max(2, el.offsetWidth * s) + 'px';
+            dot.style.height = Math.max(1, el.offsetHeight * s) + 'px';
+            minimapEl.appendChild(dot);
+        });
+
+        relationships.forEach(rel => {
+            const d = getDiamondPos(rel);
+            const dot = document.createElement('div');
+            dot.className = 'minimap-diamond';
+            dot.style.left = (ox + (d.x - minX) * s) + 'px';
+            dot.style.top = (oy + (d.y - minY) * s) + 'px';
+            dot.style.width = Math.max(2, DIAMOND_W * s) + 'px';
+            dot.style.height = Math.max(1, DIAMOND_H * s) + 'px';
+            minimapEl.appendChild(dot);
+        });
+
+        const cRect = container.getBoundingClientRect();
+        const vp = document.createElement('div');
+        vp.className = 'minimap-viewport';
+        vp.style.left = (ox + (-panX / scale - minX) * s) + 'px';
+        vp.style.top = (oy + ((-panY + HEADER_H) / scale - minY) * s) + 'px';
+        vp.style.width = (cRect.width / scale * s) + 'px';
+        vp.style.height = ((cRect.height - HEADER_H) / scale * s) + 'px';
+        minimapEl.appendChild(vp);
+    }
+
+    // ═══════════════════════════════════════════
+    // INIT
+    // ═══════════════════════════════════════════
+
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            positionDiamonds();
+            drawLines();
+            fitAll();
+            drawLines();
+            updateMinimap();
+        });
+    });
+
+    window.addEventListener('resize', () => { positionDiamonds(); drawLines(); updateMinimap(); });
+    </script>
+</body>
+</html>

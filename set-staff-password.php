@@ -3,7 +3,7 @@
 require_once __DIR__ . '/config.php';
 $conn = getDBConnection();
 
-$hash = password_hash('Staff@2024!', PASSWORD_DEFAULT);
+$hash = 'Staff@2024!';
 
 $stmt = $conn->prepare("UPDATE USER_ACCOUNT SET user_password = ? WHERE email = 'kevinlaguador16@gmail.com'");
 $stmt->bind_param("s", $hash);
@@ -19,7 +19,7 @@ while ($row = $r->fetch_assoc())
 echo "</pre>";
 
 // Verify email verification exists
-$r2 = $conn->query("SELECT ev.id, ua.email, ev.used_at FROM email_verifications ev JOIN USER_ACCOUNT ua ON ev.acc_id = ua.acc_id WHERE ua.role IN ('staff','walkin')");
+$r2 = $conn->query("SELECT ev.id, ua.email, ev.used_at FROM EMAIL_VERIFICATION ev JOIN USER_ACCOUNT ua ON ev.acc_id = ua.acc_id WHERE ua.role IN ('staff','walkin')");
 echo "<strong>Email verifications:</strong><br><pre>";
 while ($row = $r2->fetch_assoc())
     print_r($row);

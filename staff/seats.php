@@ -3,14 +3,34 @@ require_once __DIR__ . '/staff-guard.php';
 requireStaff();
 $conn = getDBConnection();
 
+date_default_timezone_set('Asia/Manila');
+
 $movieTitle = $_GET['movie'] ?? null;
 $branchName = $_GET['branch'] ?? null;
 $selectedDate = $_GET['date'] ?? date('Y-m-d');
 $selectedTime = $_GET['time'] ?? '10:30 AM';
+$cinemaId = isset($_GET['cinema_id']) ? intval($_GET['cinema_id']) : null;
 
 if (!$movieTitle || !$branchName) {
     header("Location: booking.php");
     exit();
+}
+
+// Get cinema type and price
+$cinemaName = 'Regular';
+$cinemaPrice = 350;
+$cinemaCapacity = 120;
+if ($cinemaId) {
+    $cStmt = $conn->prepare("SELECT cinema_name, capacity, price FROM CINEMA_NUMBER WHERE cinema_number_id = ? LIMIT 1");
+    $cStmt->bind_param('i', $cinemaId);
+    $cStmt->execute();
+    $cRow = $cStmt->get_result()->fetch_assoc();
+    if ($cRow) {
+        $cinemaName = $cRow['cinema_name'];
+        $cinemaPrice = floatval($cRow['price']);
+        $cinemaCapacity = intval($cRow['capacity']);
+    }
+    $cStmt->close();
 }
 
 // Validate date
@@ -56,10 +76,9 @@ $stmt->close();
 
 if ($scheduleId) {
     $seatStmt = $conn->prepare("
-        SELECT DISTINCT s.seat_number
+        SELECT DISTINCT rs.seat_number
         FROM RESERVE r
         JOIN RESERVE_SEAT rs ON r.reservation_id = rs.reservation_id
-        JOIN SEAT s ON rs.seat_id = s.seat_id
         WHERE r.schedule_id = ? 
         AND (r.booking_status IS NULL OR r.booking_status IN ('pending','approved'))
     ");
@@ -70,16 +89,30 @@ if ($scheduleId) {
     $seatStmt->close();
 }
 
-// Count total seats in layout (7 rows x max 18 seats = 98, but A/B only 9 each)
-$totalSeats = (2 * 9) + (5 * 18); // = 108 seats
+// Dynamic seat layout based on cinema type
+switch ($cinemaName) {
+    case 'IMAX':
+        $seatsPerRow = 15; $numRows = 10; // 150 seats
+        break;
+    case "Director's Club":
+        $seatsPerRow = 10; $numRows = 5; // 50 seats
+        break;
+    case 'Regular':
+    default:
+        $seatsPerRow = 15; $numRows = 8; // 120 seats
+        break;
+}
+$totalSeats = $seatsPerRow * $numRows;
 $takenCount = count($bookedSeats);
+$rowLetters = range('A', 'Z');
+$aisleAfter = intval($seatsPerRow / 2);
 
 // Get food items
 $foods = [];
 $fRes = $conn->query("SELECT food_id, food_name, food_price, image_path FROM FOOD ORDER BY food_id");
 if ($fRes) while ($f = $fRes->fetch_assoc()) $foods[] = $f;
 
-$rows = ['A','B','C','D','E','F','G'];
+// Rows computed dynamically above
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -99,7 +132,7 @@ $rows = ['A','B','C','D','E','F','G'];
     <div class="page-header page-header-row">
       <div>
         <h1>Select Seats & Food</h1>
-        <p>Step 2 of 4 — <?= htmlspecialchars($movie['title']) ?> · <?= htmlspecialchars($branchName) ?> · <?= date('M d, Y', strtotime($selectedDate)) ?> · <?= $selectedTime ?></p>
+        <p>Step 2 of 4 — <?= htmlspecialchars($movie['title']) ?> · <?= htmlspecialchars($cinemaName) ?> (₱<?= number_format($cinemaPrice,0) ?>) · <?= date('M d, Y', strtotime($selectedDate)) ?> · <?= $selectedTime ?></p>
       </div>
       <a href="booking.php" class="btn btn-outline">← Change Details</a>
     </div>
@@ -130,18 +163,17 @@ $rows = ['A','B','C','D','E','F','G'];
           <p class="screen-label">SCREEN</p>
 
           <div class="seats-grid">
-            <?php foreach ($rows as $row):
-              $maxSeat = ($row === 'A' || $row === 'B') ? 9 : 18;
+            <?php for ($r = 0; $r < $numRows; $r++):
+              $rowLetter = $rowLetters[$r];
             ?>
             <div class="seat-row">
-              <span class="seat-row-label"><?= $row ?></span>
-              <?php for ($i = 1; $i <= 18; $i++):
-                if (($row === 'A' || $row === 'B') && $i > 9) continue;
-                if ($i == 10): ?>
+              <span class="seat-row-label"><?= $rowLetter ?></span>
+              <?php for ($i = 1; $i <= $seatsPerRow; $i++):
+                if ($i == $aisleAfter + 1): ?>
                 <div class="seat-gap"></div>
               <?php endif;
-                $seatNum = $row . '-' . $i;
-                $seatNumAlt = $row . $i;
+                $seatNum = $rowLetter . '-' . $i;
+                $seatNumAlt = $rowLetter . $i;
                 $isTaken = in_array($seatNum, $bookedSeats) || in_array($seatNumAlt, $bookedSeats);
                 $cssClass = 'seat' . ($isTaken ? ' taken' : '');
               ?>
@@ -153,7 +185,7 @@ $rows = ['A','B','C','D','E','F','G'];
               </div>
               <?php endfor; ?>
             </div>
-            <?php endforeach; ?>
+            <?php endfor; ?>
           </div>
 
           <!-- Legend -->
@@ -224,7 +256,8 @@ $rows = ['A','B','C','D','E','F','G'];
 </div>
 
 <script>
-const SEAT_PRICE = 350;
+const SEAT_PRICE = <?= $cinemaPrice ?>;
+const CINEMA_NAME = '<?= addslashes($cinemaName) ?>';
 let selectedSeats = new Set();
 let foodSelections = {};
 
@@ -304,6 +337,64 @@ function updateSummary() {
   if (povBtn) povBtn.disabled = seatArr.length === 0;
 }
 
+// --- Real-time seat availability polling ---
+(function() {
+    const POLL_INTERVAL = 5000; // 5 seconds
+    const pollParams = {
+        movie_id: '<?= $movie["movie_show_id"] ?>',
+        branch_id: '<?= $branchId ?>',
+        date: '<?= $selectedDate ?>',
+        time: '<?= $timeFormatted ?>'
+    };
+
+    function pollBookedSeats() {
+        const qs = new URLSearchParams(pollParams).toString();
+        fetch('../api-booked-seats.php?' + qs)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.bookedSeats) return;
+                const freshBooked = new Set(data.bookedSeats);
+                data.bookedSeats.forEach(s => {
+                    freshBooked.add(s);
+                    if (s.includes('-')) freshBooked.add(s.replace('-', ''));
+                    else freshBooked.add(s.charAt(0) + '-' + s.substring(1));
+                });
+
+                document.querySelectorAll('.seat').forEach(seat => {
+                    const seatId = seat.dataset.seat;
+                    if (!seatId) return;
+                    const seatIdAlt = seatId.includes('-') ? seatId.replace('-', '') : seatId.charAt(0) + '-' + seatId.substring(1);
+
+                    if ((freshBooked.has(seatId) || freshBooked.has(seatIdAlt)) && !seat.classList.contains('taken')) {
+                        seat.classList.add('taken');
+                        seat.classList.remove('selected');
+                        seat.removeAttribute('tabindex');
+
+                        if (selectedSeats.has(seatId)) {
+                            selectedSeats.delete(seatId);
+                            updateSummary();
+                            seat.style.transition = 'transform 0.3s, box-shadow 0.3s';
+                            seat.style.transform = 'scale(1.3)';
+                            seat.style.boxShadow = '0 0 12px rgba(255,0,0,0.7)';
+                            setTimeout(() => {
+                                seat.style.transform = '';
+                                seat.style.boxShadow = '';
+                            }, 600);
+                        }
+                    }
+                });
+
+                // Update the occupancy counter
+                const takenCount = document.querySelectorAll('.seat.taken').length;
+                const countEl = document.querySelector('.seat-count-taken');
+                if (countEl) countEl.textContent = takenCount;
+            })
+            .catch(() => {});
+    }
+
+    setInterval(pollBookedSeats, POLL_INTERVAL);
+})();
+
 document.getElementById('proceed-btn').addEventListener('click', () => {
   if (selectedSeats.size === 0) return;
 
@@ -322,7 +413,9 @@ document.getElementById('proceed-btn').addEventListener('click', () => {
     date: '<?= $selectedDate ?>',
     time: '<?= addslashes($selectedTime) ?>',
     seats: seatArr,
-    seatsData: seatArr.map(s => ({ id: s, tier: 'Standard', price: SEAT_PRICE })),
+    seatsData: seatArr.map(s => ({ id: s, tier: CINEMA_NAME, price: SEAT_PRICE })),
+    cinemaId: <?= $cinemaId ? $cinemaId : 'null' ?>,
+    cinemaName: CINEMA_NAME,
     food: foodData,
     foodTotal: foodTotal
   };

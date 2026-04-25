@@ -15,6 +15,16 @@ $branchName  = urldecode($bookingData['branch'] ?? '');
 $showDate    = $bookingData['date'] ?? date('Y-m-d');
 $showTime    = $bookingData['time'] ?? '';
 $seats       = $bookingData['seats'] ?? [];
+
+// Determine cheapest seat price for PWD/Senior discount (applies to 1 seat only)
+$seatsData = $bookingData['seatsData'] ?? [];
+$cheapestSeatPrice = 0;
+if (!empty($seatsData)) {
+    $prices = array_map(fn($s) => floatval($s['price'] ?? 0), $seatsData);
+    $cheapestSeatPrice = min($prices);
+} elseif (count($seats) > 0) {
+    $cheapestSeatPrice = $seatTotal / count($seats); // fallback: average
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -90,13 +100,13 @@ $seats       = $bookingData['seats'] ?? [];
             </label>
           </div>
 
-          <!-- PWD Discount Section -->
+          <!-- PWD / Senior ID Discount Section -->
           <div style="margin-top:20px;margin-bottom:20px;">
             <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:14px 16px;border:2px solid var(--card-border);border-radius:10px;transition:all 0.2s;" id="pwdToggleLabel">
               <input type="checkbox" id="pwdToggle" name="pwd_discount" value="1" onchange="togglePwdDiscount()" style="width:18px;height:18px;accent-color:var(--blue);cursor:pointer;">
               <div>
-                <div style="font-weight:700;font-size:14px;color:var(--text-primary);">PWD Discount</div>
-                <div style="font-size:12px;color:var(--text-muted);">20% off seat price for Persons with Disability</div>
+                <div style="font-weight:700;font-size:14px;color:var(--text-primary);">PWD / Senior ID Discount</div>
+                <div style="font-size:12px;color:var(--text-muted);">20% off 1 seat only (cheapest seat in this transaction)</div>
               </div>
             </label>
 
@@ -184,13 +194,15 @@ $seats       = $bookingData['seats'] ?? [];
 <script>
 const originalGrandTotal = <?= json_encode($grandTotal) ?>;
 const seatTotal = <?= json_encode($seatTotal) ?>;
+// PWD/Senior discount applies to only 1 seat (the cheapest seat price)
+const cheapestSeatPrice = <?= json_encode($cheapestSeatPrice) ?>;
 let currentTotal = originalGrandTotal;
 let selectedMethod = null;
 let pwdEnabled = false;
 
 function getEffectiveTotal() {
   if (pwdEnabled) {
-    const discount = seatTotal * 0.20;
+    const discount = cheapestSeatPrice * 0.20;
     return originalGrandTotal - discount;
   }
   return originalGrandTotal;
@@ -205,10 +217,10 @@ function updateAmountDue() {
   const banner = document.getElementById('amountDueBanner');
 
   if (pwdEnabled) {
-    const discount = seatTotal * 0.20;
+    const discount = cheapestSeatPrice * 0.20;
     origEl.textContent = '₱' + originalGrandTotal.toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
     origEl.style.display = 'block';
-    savingsEl.textContent = 'PWD Discount: -₱' + discount.toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
+    savingsEl.textContent = 'PWD/Senior Discount (1 seat): -₱' + discount.toLocaleString('en-PH', {minimumFractionDigits:2, maximumFractionDigits:2});
     savingsEl.style.display = 'block';
     banner.style.background = 'rgba(46,204,113,0.12)';
     banner.style.borderColor = 'rgba(46,204,113,0.4)';
@@ -299,11 +311,8 @@ function validateForm() {
     }
   }
 
-  // If PWD is enabled, also require ID number
-  if (pwdEnabled) {
-    const idNum = document.getElementById('pwdIdNumber').value.trim();
-    if (!idNum) valid = false;
-  }
+  // PWD ID is optional — discount can be applied without requiring an ID number
+  // Staff can still enter it if the customer provides one
 
   btn.disabled = !valid;
 }

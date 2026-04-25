@@ -43,9 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
         $user = $result->fetch_assoc();
         $stmt->close();
         
-        if ($user && password_verify($currentPassword, $user['user_password'])) {
+        if ($user && $currentPassword === $user['user_password']) {
             // Update password
-            $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+            $hashedPassword = $newPassword;
             $stmt = $conn->prepare("UPDATE USER_ACCOUNT SET user_password = ? WHERE acc_id = ?");
             $stmt->bind_param("si", $hashedPassword, $userId);
             
@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_email'])) {
         $user = $result->fetch_assoc();
         $stmt->close();
         
-        if ($user && password_verify($password, $user['user_password'])) {
+        if ($user && $password === $user['user_password']) {
             // Check if email already exists
             $stmt = $conn->prepare("SELECT acc_id FROM USER_ACCOUNT WHERE email = ? AND acc_id != ?");
             $stmt->bind_param("si", $newEmail, $userId);

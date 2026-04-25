@@ -30,11 +30,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             if (!in_array($row['role'] ?? 'user', ['staff', 'mall_admin'])) {
                 $error_message = "Access denied. This portal is for staff only.";
-            } elseif (!password_verify($password, $row['user_password'])) {
+            } elseif ($password !== $row['user_password']) {
                 $error_message = "Invalid password.";
             } else {
                 // Check email verified
-                $vStmt = $conn->prepare("SELECT 1 FROM email_verifications WHERE acc_id = ? AND used_at IS NOT NULL LIMIT 1");
+                $vStmt = $conn->prepare("SELECT 1 FROM EMAIL_VERIFICATION WHERE acc_id = ? AND used_at IS NOT NULL LIMIT 1");
                 $vStmt->bind_param("i", $row['acc_id']);
                 $vStmt->execute();
                 $verified = $vStmt->get_result()->num_rows > 0;

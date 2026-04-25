@@ -18,7 +18,7 @@
 
         <div class="pov-header">
             <div class="pov-header-left">
-                <span class="pov-eye-icon">👁</span>
+                <span class="pov-eye-icon"></span>
                 <div>
                     <h2 class="pov-title">View From Seat</h2>
                     <p class="pov-subtitle" id="pov-seat-label">Select a seat to preview</p>

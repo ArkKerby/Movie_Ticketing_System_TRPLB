@@ -25,9 +25,20 @@ $pwdDiscount   = isset($_POST['pwd_discount']) ? 1 : 0;
 $pwdIdNumber   = trim($_POST['pwd_id_number'] ?? '');
 $pwdIdImagePath = '';
 
-// Apply PWD discount (20% off seat total) if enabled
+// Apply PWD/Senior discount (20% off 1 seat only — the cheapest seat price)
 if ($pwdDiscount) {
-    $pwdDiscountAmount = $seatTotal * 0.20;
+    // Determine the cheapest seat price from booking data
+    $seatsData = $bookingData['seatsData'] ?? [];
+    if (!empty($seatsData)) {
+        $prices = array_map(fn($s) => floatval($s['price'] ?? 0), $seatsData);
+        $cheapestSeatPrice = min($prices);
+    } elseif (count($bookingData['seats'] ?? []) > 0) {
+        // Fallback: use average seat price
+        $cheapestSeatPrice = $seatTotal / count($bookingData['seats']);
+    } else {
+        $cheapestSeatPrice = 0;
+    }
+    $pwdDiscountAmount = $cheapestSeatPrice * 0.20;
     $grandTotal = ($seatTotal - $pwdDiscountAmount) + $foodTotal;
 }
 
@@ -53,13 +64,21 @@ $showDate      = $bookingData['date'] ?? date('Y-m-d');
 $selectedSeats = $bookingData['seats'] ?? [];
 $foodItems     = $bookingData['food'] ?? [];
 
-// Use walk-in customer account
+// Use walk-in customer account — auto-create if it doesn't exist
 $stmt = $conn->prepare("SELECT acc_id FROM USER_ACCOUNT WHERE email = 'walkin@ticketix.staff' LIMIT 1");
 $stmt->execute();
 $res = $stmt->get_result();
 $walkinUser = $res->fetch_assoc();
 $userId = $walkinUser['acc_id'] ?? null;
 $stmt->close();
+
+if (!$userId) {
+    // Auto-create the walk-in placeholder account
+    $stmt = $conn->prepare("INSERT INTO USER_ACCOUNT (fullName, firstName, lastName, email, user_password, time_created, role) VALUES ('Walk-In Customer', 'Walk-In', 'Customer', 'walkin@ticketix.staff', '', NOW(), 'walkin')");
+    $stmt->execute();
+    $userId = $conn->insert_id;
+    $stmt->close();
+}
 
 if (!$userId || empty($selectedSeats) || !$movieTitle) {
     $_SESSION['staff_error'] = "Booking failed: Missing required data.";
@@ -119,45 +138,22 @@ try {
     $stmt->close();
     if (!$reservationId) throw new Exception("Failed to create reservation");
 
-    // Create / link seats
-    $seatPrice = 350.00;
+    // Create / link seats (RESERVE_SEAT stores seat_number directly)
     foreach ($selectedSeats as $seatNumber) {
-        $stmt = $conn->prepare("SELECT seat_id FROM SEAT WHERE seat_number = ? LIMIT 1");
-        $stmt->bind_param("s", $seatNumber);
-        $stmt->execute();
-        $st = $stmt->get_result()->fetch_assoc();
-        $seatId = $st['seat_id'] ?? null;
-        $stmt->close();
-
-        if (!$seatId) {
-            $stmt = $conn->prepare("INSERT INTO SEAT (seat_number, seat_type, seat_price) VALUES (?, 'Regular', ?)");
-            $stmt->bind_param("sd", $seatNumber, $seatPrice);
-            $stmt->execute();
-            $seatId = $conn->insert_id;
-            $stmt->close();
-        }
-
-        $stmt = $conn->prepare("INSERT INTO RESERVE_SEAT (reservation_id, seat_id) VALUES (?,?)");
-        $stmt->bind_param("ii", $reservationId, $seatId);
+        $stmt = $conn->prepare("INSERT INTO RESERVE_SEAT (reservation_id, seat_number) VALUES (?,?)");
+        $stmt->bind_param("is", $reservationId, $seatNumber);
         $stmt->execute();
         $stmt->close();
     }
 
-    // Create payment
-    $amountPaid = $grandTotal;
-    $stmt = $conn->prepare("INSERT INTO PAYMENT (reserve_id, payment_type, amount_paid, payment_status, payment_date, reference_number) VALUES (?,?,?,'paid',NOW(),?)");
-    $stmt->bind_param("isds", $reservationId, $dbPaymentType, $amountPaid, $refNumber);
-    if (!$stmt->execute()) throw new Exception("Payment insert failed: " . $stmt->error);
-    $paymentId = $conn->insert_id;
-    $stmt->close();
-
-    // Create ticket
+    // Create ticket (payment fields are on the TICKET table)
+    $amountPaid   = $grandTotal;
     $ticketNumber = 'TIX-' . strtoupper(substr(uniqid(), -8)) . '-' . date('Ymd');
     $eTicketCode  = bin2hex(random_bytes(16));
     $ticketStatus = 'valid';
 
-    $stmt = $conn->prepare("INSERT INTO TICKET (reserve_id, payment_id, ticket_number, date_issued, ticket_status, e_ticket_code) VALUES (?,?,?,NOW(),?,?)");
-    $stmt->bind_param("iisss", $reservationId, $paymentId, $ticketNumber, $ticketStatus, $eTicketCode);
+    $stmt = $conn->prepare("INSERT INTO TICKET (reserve_id, ticket_number, date_issued, ticket_status, e_ticket_code, payment_type, amount_paid, payment_status, payment_date, reference_number) VALUES (?,?,NOW(),?,?,?,?,'paid',NOW(),?)");
+    $stmt->bind_param("issssds", $reservationId, $ticketNumber, $ticketStatus, $eTicketCode, $dbPaymentType, $amountPaid, $refNumber);
     if (!$stmt->execute()) throw new Exception("Ticket insert failed: " . $stmt->error);
     $ticketId = $conn->insert_id;
     $stmt->close();

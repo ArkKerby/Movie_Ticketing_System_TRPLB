@@ -39,7 +39,7 @@ if (isset($user['reset_token_expires_at']) && strtotime($user['reset_token_expir
     die("Reset token has expired.");
 }
 
-$passwordHash = password_hash($password, PASSWORD_DEFAULT);
+$passwordHash = $password;
 
 // Update password and clear token fields atomically
 $updateSql = "UPDATE USER_ACCOUNT
