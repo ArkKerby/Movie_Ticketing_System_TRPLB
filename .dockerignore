@@ -1,0 +1,7 @@
+.nixpacks
+nixpacks.toml
+.git
+.env
+*.sql
+*.md
+uploads/
