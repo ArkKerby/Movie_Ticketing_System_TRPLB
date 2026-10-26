@@ -3,6 +3,11 @@ session_start();
 require_once __DIR__ . '/config.php';
 $conn = getDBConnection();
 
+if ($conn === null) {
+  // Demo mode - no database available
+  require_once __DIR__ . '/demo-data.php';
+} else {
+
 $contactSuccess = '';
 $contactError = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['contact_form'])) {
@@ -166,6 +171,7 @@ if ($hasCinemaAssignments) {
 }
 
 $conn->close();
+} // end database mode
 ?>
 
 <!DOCTYPE html>
@@ -222,6 +228,7 @@ $conn->close();
     $bannerHomeUserId = $_SESSION['user_id'] ?? $_SESSION['acc_id'] ?? null;
     if ($bannerHomeUserId) {
       $conn = getDBConnection();
+      if (!$conn) { /* Demo mode - skip DB checks */ } else {
       $bannerHomeTbl = $conn->query("SHOW TABLES LIKE 'DISCOUNT_APPLICATIONS'");
       if ($bannerHomeTbl && $bannerHomeTbl->num_rows > 0) {
         $bhStmt = $conn->prepare("SELECT status FROM DISCOUNT_APPLICATIONS WHERE acc_id = ? AND discount_type = 'pwd' ORDER BY submitted_at DESC LIMIT 1");
@@ -244,6 +251,7 @@ $conn->close();
         $showPwdBannerHome = true;
       }
       $conn->close();
+      } // end if ($conn)
     }
   }
   ?>

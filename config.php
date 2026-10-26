@@ -13,16 +13,21 @@ define('DB_PORT', getenv('DB_PORT') ? (int)getenv('DB_PORT') : 3306);
 
 // Function to create database connection
 function getDBConnection() {
-	$conn = new mysqli(DB_HOST, DB_USERNAME, DB_PASSWORD, DB_NAME, DB_PORT);
-	
-	if ($conn->connect_error) {
-		if ($conn->connect_errno == 1049) {
-			die("Database '" . DB_NAME . "' not found! Please run setup_database.php first to create the database.");
-		} else {
-			die("Connection failed: " . $conn->connect_error);
+	try {
+		$conn = new mysqli(DB_HOST, DB_USERNAME, DB_PASSWORD, DB_NAME, DB_PORT);
+		
+		if ($conn->connect_error) {
+			if ($conn->connect_errno == 1049) {
+				die("Database '" . DB_NAME . "' not found! Please run setup_database.php first to create the database.");
+			} else {
+				die("Connection failed: " . $conn->connect_error);
+			}
 		}
+		
+		return $conn;
+	} catch (\Exception $e) {
+		// No database available - return null for demo mode
+		return null;
 	}
-	
-	return $conn;
 }
 ?>

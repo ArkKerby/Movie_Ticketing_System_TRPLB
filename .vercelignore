@@ -1,0 +1,14 @@
+/vendor
+.git
+*.sql
+*.md
+Dockerfile
+.dockerignore
+railway.json
+*.lnk
+debug-*.php
+test-*.php
+set-staff-password.php
+setup_database.php
+migrate-consolidate.php
+run-migration.php
